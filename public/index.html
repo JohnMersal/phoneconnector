@@ -1,1 +1,33 @@
 
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CRM Dialer Bridge</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 50px; }
+        #dial-btn { 
+            display: block; padding: 20px; background: green; 
+            color: white; font-size: 24px; text-decoration: none; border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Latest Number:</h2>
+    <a id="dial-btn" href="tel:">Waiting...</a>
+
+    <script>
+        async function fetchNumber() {
+            try {
+                const res = await fetch('https://your-api-url.com/get-number');
+                const data = await res.json();
+                const btn = document.getElementById('dial-btn');
+                btn.innerText = "Call: " + data.phone;
+                btn.href = "tel:" + data.phone.replace(/-/g, '');
+            } catch (e) { console.error("Error fetching", e); }
+        }
+        // Refresh every 2 seconds
+        setInterval(fetchNumber, 2000);
+    </script>
+</body>
+</html>
