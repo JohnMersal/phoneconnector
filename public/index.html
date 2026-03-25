@@ -47,27 +47,14 @@
     <div class="footer" id="last-sync">Last sync: Never</div>
 
     <script>
-        const btn = document.getElementById('dial-btn');
-const sync = document.getElementById('last-sync');
-let currentNum = "";
-let vibrationUnlocked = false;
-
-// 1. Get userId from URL hash, or prompt the user if it's missing
-let userId = window.location.hash.substring(1);
-
-if (!userId) {
-    userId = prompt("Enter your Unique ID (e.g., john, omar):");
-    if (userId) {
-        window.location.hash = userId; // Save it to the URL for next time
-    } else {
-        alert("User ID is required for the dialer to work.");
-    }
-}
-
-// 2. Arm the vibration motor on the first click
+       // 2. Arm the vibration motor on the first click
 window.addEventListener('click', () => {
     if (!vibrationUnlocked) {
         vibrationUnlocked = true;
+        
+        // THIS LINE WAS MISSING OR NOT TARGETING THE ID CORRECTLY:
+        document.getElementById('overlay').style.display = 'none';
+        
         console.log("Vibration motor armed for user:", userId);
         if (navigator.vibrate) navigator.vibrate(100); // Quick test buzz
     }
@@ -78,24 +65,28 @@ async function update() {
     if (!userId) return;
     
     try {
-        // Fetch only for the specific tenant
         const response = await fetch(`/get-number/${userId}`);
         const data = await response.json();
         
-        // Only trigger if we have a real phone number that is NEW
+        // If it's the first run and there's already a number, 
+        // set it as current so we don't vibrate immediately on load
+        if (currentNum === "" && data.phone !== "No number yet") {
+            currentNum = data.phone;
+            btn.innerText = data.phone;
+            btn.href = "tel:" + data.phone.replace(/\D/g, '');
+            return;
+        }
+
         if (data.phone && data.phone !== currentNum && data.phone !== "No number yet") {
             currentNum = data.phone;
             
-            // UI Updates
             btn.innerText = data.phone;
             btn.href = "tel:" + data.phone.replace(/\D/g, '');
             sync.innerText = `User: ${userId} | Sync: ` + new Date().toLocaleTimeString();
             
-            // Visual Flash (Designer touch)
             document.body.style.backgroundColor = "#2ecc71";
             setTimeout(() => { document.body.style.backgroundColor = "#000"; }, 400);
             
-            // Physical Feedback
             if (vibrationUnlocked && navigator.vibrate) {
                 navigator.vibrate([500, 100, 500]);
             }
@@ -104,9 +95,6 @@ async function update() {
         console.error("Polling error:", e);
     }
 }
-
-// 4. Check every 1 second
-setInterval(update, 1000);
     </script>
 </body>
 </html>
