@@ -1,36 +1,31 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const app = express();
 
-// Enable CORS so your CRM script (on a different domain) can talk to this API
 app.use(cors());
 app.use(express.json());
-
-// Serve the mobile page
 app.use(express.static('public'));
 
-let latestNumber = "No number yet";
+// Store numbers in an object: { "john": "010...", "omar": "012..." }
+let userStore = {};
 
-// Endpoint for CRM to send number
-app.post('/set-number', (req, res) => {
+// CRM sends to: /set-number/john
+app.post('/set-number/:userId', (req, res) => {
+    const { userId } = req.params;
     const { phone } = req.body;
-    if (phone) {
-        latestNumber = phone;
-        console.log("Received phone:", latestNumber);
-        return res.json({ success: true, message: "Number updated" });
+    if (phone && userId) {
+        userStore[userId] = phone;
+        console.log(`User ${userId} received: ${phone}`);
+        return res.json({ success: true });
     }
-    res.status(400).json({ success: false, message: "No phone provided" });
+    res.status(400).send("Missing data");
 });
 
-// Endpoint for Mobile to get number
-app.get('/get-number', (req, res) => {
-    res.json({ phone: latestNumber });
+// Mobile pulls from: /get-number/john
+app.get('/get-number/:userId', (req, res) => {
+    const { userId } = req.params;
+    res.json({ phone: userStore[userId] || "No number yet" });
 });
-
 
 const PORT = process.env.PORT || 3000;
-// Listen on 0.0.0.0 to allow external access within the Docker network
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+app.listen(PORT, '0.0.0.0', () => console.log(`Multi-tenant server on ${PORT}`));
