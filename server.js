@@ -28,7 +28,9 @@ app.get('/get-number', (req, res) => {
     res.json({ phone: latestNumber });
 });
 
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+// Listen on 0.0.0.0 to allow external access within the Docker network
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
 });
