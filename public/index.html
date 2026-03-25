@@ -48,49 +48,65 @@
 
     <script>
         const btn = document.getElementById('dial-btn');
-        const sync = document.getElementById('last-sync');
-        const overlay = document.getElementById('overlay');
-        const statusLabel = document.getElementById('status-label');
-        let currentNum = "";
-        let canVibrate = false;
+const sync = document.getElementById('last-sync');
+let currentNum = "";
+let vibrationUnlocked = false;
 
-        // Unlock vibration on first tap
-        window.addEventListener('click', () => {
-            canVibrate = true;
-            overlay.style.display = 'none';
-            if (navigator.vibrate) navigator.vibrate(100); // Confirmation buzz
-            console.log("Vibration active");
-        }, { once: true });
+// 1. Get userId from URL hash, or prompt the user if it's missing
+let userId = window.location.hash.substring(1);
 
-        async function update() {
-            try {
-                const r = await fetch('/get-number');
-                const d = await r.json();
-                
-                if (d.phone && d.phone !== currentNum && d.phone !== "No number yet") {
-                    currentNum = d.phone;
-                    const clean = d.phone.replace(/\D/g, '');
-                    
-                    btn.innerText = d.phone;
-                    btn.href = "tel:" + clean;
-                    sync.innerText = "Updated: " + new Date().toLocaleTimeString();
-                    
-                    // Visual Flash
-                    document.body.style.backgroundColor = "#2ecc71";
-                    setTimeout(() => { document.body.style.backgroundColor = "#000"; }, 400);
+if (!userId) {
+    userId = prompt("Enter your Unique ID (e.g., john, omar):");
+    if (userId) {
+        window.location.hash = userId; // Save it to the URL for next time
+    } else {
+        alert("User ID is required for the dialer to work.");
+    }
+}
 
-                    // Vibration Pattern: 500ms on, 100ms off, 500ms on
-                    if (canVibrate && navigator.vibrate) {
-                        navigator.vibrate([500, 100, 500]);
-                    }
-                }
-            } catch(e) {
-                console.error("Sync error", e);
+// 2. Arm the vibration motor on the first click
+window.addEventListener('click', () => {
+    if (!vibrationUnlocked) {
+        vibrationUnlocked = true;
+        console.log("Vibration motor armed for user:", userId);
+        if (navigator.vibrate) navigator.vibrate(100); // Quick test buzz
+    }
+}, { once: true });
+
+// 3. Main Polling Function
+async function update() {
+    if (!userId) return;
+    
+    try {
+        // Fetch only for the specific tenant
+        const response = await fetch(`/get-number/${userId}`);
+        const data = await response.json();
+        
+        // Only trigger if we have a real phone number that is NEW
+        if (data.phone && data.phone !== currentNum && data.phone !== "No number yet") {
+            currentNum = data.phone;
+            
+            // UI Updates
+            btn.innerText = data.phone;
+            btn.href = "tel:" + data.phone.replace(/\D/g, '');
+            sync.innerText = `User: ${userId} | Sync: ` + new Date().toLocaleTimeString();
+            
+            // Visual Flash (Designer touch)
+            document.body.style.backgroundColor = "#2ecc71";
+            setTimeout(() => { document.body.style.backgroundColor = "#000"; }, 400);
+            
+            // Physical Feedback
+            if (vibrationUnlocked && navigator.vibrate) {
+                navigator.vibrate([500, 100, 500]);
             }
         }
+    } catch (e) {
+        console.error("Polling error:", e);
+    }
+}
 
-        // Fast polling for real-time feel
-        setInterval(update, 1000);
+// 4. Check every 1 second
+setInterval(update, 1000);
     </script>
 </body>
 </html>
