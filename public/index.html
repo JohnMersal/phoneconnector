@@ -46,69 +46,51 @@
     <div class="footer" id="last-sync">Last sync: Never</div>
 
     <script>
-        // 1. VARIABLE DECLARATIONS (Crucial)
         const btn = document.getElementById('dial-btn');
-        const sync = document.getElementById('last-sync');
-        const overlay = document.getElementById('overlay');
-        let currentNum = "";
-        let vibrationUnlocked = false;
+const sync = document.getElementById('last-sync');
+const overlay = document.getElementById('overlay');
+let currentNum = "";
+let vibrationUnlocked = false;
 
-        // 2. GET USER ID
-        let userId = window.location.hash.substring(1).toLowerCase();
-        if (!userId) {
-            userId = prompt("Enter your Unique ID (e.g., john):");
-            if (userId) window.location.hash = userId;
+// Initialize Socket
+const socket = io();
+
+let userId = window.location.hash.substring(1).toLowerCase();
+if (!userId) {
+    userId = prompt("Enter your Unique ID:");
+    if (userId) window.location.hash = userId;
+}
+
+// Join the specific tenant room
+if (userId) {
+    socket.emit('join-room', userId);
+}
+
+window.addEventListener('click', () => {
+    if (!vibrationUnlocked) {
+        vibrationUnlocked = true;
+        overlay.style.display = 'none';
+        if (navigator.vibrate) navigator.vibrate(100);
+    }
+}, { once: true });
+
+// INSTEAD OF POLLING: Wait for the server to PUSH
+socket.on('new-number', (phone) => {
+    if (phone && phone !== currentNum && phone !== "No number yet") {
+        currentNum = phone;
+        
+        btn.innerText = phone;
+        btn.href = "tel:" + phone.replace(/\D/g, '');
+        sync.innerText = `User: ${userId} | Last Push: ` + new Date().toLocaleTimeString();
+        
+        document.body.style.backgroundColor = "#2ecc71";
+        setTimeout(() => { document.body.style.backgroundColor = "#000"; }, 400);
+        
+        if (vibrationUnlocked && navigator.vibrate) {
+            navigator.vibrate([500, 100, 500]);
         }
-
-        // 3. THE CLICK LISTENER (To hide overlay and unlock vibrate)
-        window.addEventListener('click', () => {
-            if (!vibrationUnlocked) {
-                vibrationUnlocked = true;
-                overlay.style.display = 'none'; // This will now definitely work
-                console.log("Vibration motor armed for user:", userId);
-                if (navigator.vibrate) navigator.vibrate(100);
-            }
-        }, { once: true });
-
-        // 4. MAIN POLLING FUNCTION
-        async function update() {
-            if (!userId) return;
-            
-            try {
-                const response = await fetch(`/get-number/${userId}`);
-                const data = await response.json();
-                
-                // Initial load: set the number without vibrating
-                if (currentNum === "" && data.phone !== "No number yet") {
-                    currentNum = data.phone;
-                    btn.innerText = data.phone;
-                    btn.href = "tel:" + data.phone.replace(/\D/g, '');
-                    return;
-                }
-
-                // New number detected
-                if (data.phone && data.phone !== currentNum && data.phone !== "No number yet") {
-                    currentNum = data.phone;
-                    
-                    btn.innerText = data.phone;
-                    btn.href = "tel:" + data.phone.replace(/\D/g, '');
-                    sync.innerText = `User: ${userId} | Sync: ` + new Date().toLocaleTimeString();
-                    
-                    // Feedback
-                    document.body.style.backgroundColor = "#2ecc71";
-                    setTimeout(() => { document.body.style.backgroundColor = "#000"; }, 400);
-                    
-                    if (vibrationUnlocked && navigator.vibrate) {
-                        navigator.vibrate([500, 100, 500]);
-                    }
-                }
-            } catch (e) {
-                console.error("Polling error:", e);
-            }
-        }
-
-        // 5. START POLLING
-        setInterval(update, 1000);
+    }
+});
     </script>
 </body>
 </html>
