@@ -186,7 +186,17 @@
                 const response = await fetch(`/get-number/${userId}`);
                 const data = await response.json();
 
+                // 1. Check if the server actually has a number
                 if (data.phone && data.phone !== "No number yet") {
+                    
+                    // 2. NEW LOGIC: Check if the number is the SAME as what we already have
+                    if (data.phone === currentNum) {
+                        pullBtn.innerText = "Already Up to Date ✅";
+                        setTimeout(() => { pullBtn.innerText = "📥 PULL NEW LEAD"; }, 2000);
+                        return; // Exit here so we don't flash/vibrate
+                    }
+
+                    // 3. If it's a NEW number, proceed with effects
                     currentNum = data.phone;
                     formattedIntl = getFormatted002(data.phone);
                     formattedPlus = getFormattedPlus(data.phone);
@@ -194,7 +204,6 @@
                     btn.innerText = data.phone; 
                     btn.href = "tel:" + formattedIntl;
 
-                    // Show secondary action buttons
                     zoomBtn.style.display = 'flex';
                     copyBtn.style.display = 'flex';
                     
