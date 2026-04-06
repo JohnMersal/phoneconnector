@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const app = express();
 
 app.use(cors());
@@ -15,7 +16,6 @@ app.post('/set-number/:userId', (req, res) => {
     const { phone } = req.body;
     
     if (phone && userId) {
-        // Normalize userId to lowercase to prevent mismatch
         userStore[userId.toLowerCase()] = phone;
         console.log(`Update for ${userId}: ${phone}`);
         return res.json({ success: true });
@@ -23,10 +23,19 @@ app.post('/set-number/:userId', (req, res) => {
     res.status(400).send("Missing data");
 });
 
-// Phone polls this: /get-number/john
+// Phone pulls this: /get-number/john
 app.get('/get-number/:userId', (req, res) => {
     const userId = req.params.userId.toLowerCase();
     res.json({ phone: userStore[userId] || "No number yet" });
+});
+
+/* ==========================================
+   NEW: AGENT URL ROUTE
+   This allows /john, /angelo, etc. 
+   to load the mobile app directly.
+   ========================================== */
+app.get('/:agentName', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
