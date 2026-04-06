@@ -25,7 +25,7 @@ app.post('/set-number/:userId', (req, res) => {
     if (phone && userId) {
         const normalizedId = userId.toLowerCase();
         userStore[normalizedId] = phone;
-        console.log(`[CRM] Updated ${normalizedId}: ${phone}`);
+        // console.log(`[CRM] Updated ${normalizedId}: ${phone}`);
         return res.json({ success: true, agent: normalizedId, number: phone });
     }
     res.status(400).send("Missing phone or userId");
@@ -39,7 +39,7 @@ app.get('/get-number/:userId', (req, res) => {
     const userId = req.params.userId.toLowerCase();
     const number = userStore[userId] || "No number yet";
     
-    console.log(`[MOBILE] ${userId} polled for a lead. Result: ${number}`);
+    // console.log(`[MOBILE] ${userId} polled for a lead. Result: ${number}`);
     res.json({ phone: number });
 });
 
