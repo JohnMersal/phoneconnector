@@ -4,16 +4,16 @@ FROM node:18-slim
 # Create app directory
 WORKDIR /usr/src/app
 
-# Copy package files first (for better caching)
+# Copy package files first
 COPY package*.json ./
 
 # Install dependencies
 RUN npm install --production
 
-# Copy the rest of your app (server.js and /public folder)
+# Copy the rest of your app (IMPORTANT: this includes server.js AND the public folder)
 COPY . .
 
-# EasyPanel will use this port
+# EasyPanel port
 EXPOSE 3000
 
 # Start the application
