@@ -5,7 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <link rel="manifest" href="/manifest.json">
+    <script>
+    (function() {
+        // Get the agent name from the path (e.g., "john")
+        const pathParts = window.location.pathname.split('/').filter(p => p);
+        const agentName = pathParts[0] || "Agent";
+        const capitalizedAgent = agentName.charAt(0).toUpperCase() + agentName.slice(1);
+
+        // Create a dynamic manifest object
+        const myDynamicManifest = {
+            "name": `CRM Dialer - ${capitalizedAgent}`,
+            "short_name": capitalizedAgent,
+            "start_url": window.location.href, // This locks the app to /john
+            "display": "standalone",
+            "background_color": "#000000",
+            "theme_color": "#000000",
+            "icons": [
+                {
+                    "src": "https://cdn-icons-png.flaticon.com/512/5585/5585856.png",
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "any maskable"
+                }
+            ]
+        };
+
+        // Convert to a string and then to a Blob URL
+        const stringManifest = JSON.stringify(myDynamicManifest);
+        const blob = new Blob([stringManifest], {type: 'application/json'});
+        const manifestURL = URL.createObjectURL(blob);
+        
+        // Inject the manifest link into the head
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = manifestURL;
+        document.head.appendChild(link);
+    })();
+</script>
     
     <title>CRM Dialer - Agent Portal</title>
     <style>
