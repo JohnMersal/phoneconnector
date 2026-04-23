@@ -7,41 +7,35 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script>
     (function() {
-        // Get the agent name from the path (e.g., "john")
         const pathParts = window.location.pathname.split('/').filter(p => p);
         const agentName = pathParts[0] || "Agent";
         const capitalizedAgent = agentName.charAt(0).toUpperCase() + agentName.slice(1);
 
-        // Create a dynamic manifest object
         const myDynamicManifest = {
             "name": `CRM Dialer - ${capitalizedAgent}`,
             "short_name": capitalizedAgent,
-            "start_url": window.location.href, // This locks the app to /john
+            "start_url": window.location.href,
             "display": "standalone",
             "background_color": "#000000",
             "theme_color": "#000000",
-            "icons": [
-                {
-                    "src": "https://cdn-icons-png.flaticon.com/512/5585/5585856.png",
-                    "sizes": "512x512",
-                    "type": "image/png",
-                    "purpose": "any maskable"
-                }
-            ]
+            "icons": [{
+                "src": "https://cdn-icons-png.flaticon.com/512/5585/5585856.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any maskable"
+            }]
         };
 
-        // Convert to a string and then to a Blob URL
         const stringManifest = JSON.stringify(myDynamicManifest);
         const blob = new Blob([stringManifest], {type: 'application/json'});
         const manifestURL = URL.createObjectURL(blob);
         
-        // Inject the manifest link into the head
         const link = document.createElement('link');
         link.rel = 'manifest';
         link.href = manifestURL;
         document.head.appendChild(link);
     })();
-</script>
+    </script>
     
     <title>CRM Dialer - Agent Portal</title>
     <style>
@@ -57,15 +51,15 @@
             overflow: hidden;
         }
 
-        .info { 
-            font-size: 14px; color: #666; text-transform: uppercase; 
-            letter-spacing: 2px; text-align: center; margin-top: 20px;
+        #auto-zoom-container {
+            position: absolute; top: 15px; right: 15px; z-index: 50; 
+            display: flex; align-items: center; gap: 8px; 
+            font-size: 12px; font-weight: bold; color: #888;
         }
 
-        .button-container {
-            width: 85%; display: flex; flex-direction: column;
-            gap: 12px; align-items: center;
-        }
+        .info { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 40px; }
+
+        .button-container { width: 85%; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 
         #pull-btn {
             width: 100%; height: 10vh; background: #3498db; color: white;
@@ -84,24 +78,16 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* NEW ZOOM BUTTON STYLE */
-        #zoom-btn {
+        #zoom-btn, #copy-btn {
             width: 100%; height: 8vh; display: none; 
             align-items: center; justify-content: center;
-            background: #2D8CFF; color: white; text-decoration: none;
-            font-size: 18px; font-weight: 700; border-radius: 20px;
-            border: none; cursor: pointer;
+            border-radius: 20px; border: none; cursor: pointer;
+            font-size: 18px; font-weight: 700;
             -webkit-tap-highlight-color: transparent;
         }
 
-        #copy-btn {
-            width: 100%; height: 8vh; display: none; 
-            align-items: center; justify-content: center;
-            background: #333; color: #fff; text-decoration: none;
-            font-size: 16px; font-weight: 600; border-radius: 20px;
-            border: 1px solid #444;
-            -webkit-tap-highlight-color: transparent;
-        }
+        #zoom-btn { background: #2D8CFF; color: white; }
+        #copy-btn { background: #333; color: #fff; border: 1px solid #444; }
 
         #pull-btn:active, #zoom-btn:active, #copy-btn:active { transform: scale(0.96); opacity: 0.9; }
         #dial-btn:active { transform: scale(0.96); filter: brightness(0.9); }
@@ -119,6 +105,11 @@
 <body>
 
     <div id="overlay">TAP TO START <br> AGENT SESSION</div>
+
+    <div id="auto-zoom-container">
+        <input type="checkbox" id="auto-zoom-toggle">
+        <label for="auto-zoom-toggle">AUTO ZOOM</label>
+    </div>
 
     <div class="info" id="agent-label">Agent: Loading...</div>
     
@@ -139,11 +130,18 @@
         const sync = document.getElementById('last-sync');
         const overlay = document.getElementById('overlay');
         const agentLabel = document.getElementById('agent-label');
+        const autoZoomToggle = document.getElementById('auto-zoom-toggle');
 
         let currentNum = "";
         let formattedIntl = "";
         let formattedPlus = "";
         let vibrationUnlocked = false;
+
+        // Load Auto Zoom preference
+        autoZoomToggle.checked = localStorage.getItem('autoZoom') === 'true';
+        autoZoomToggle.addEventListener('change', () => {
+            localStorage.setItem('autoZoom', autoZoomToggle.checked);
+        });
 
         const pathParts = window.location.pathname.split('/').filter(p => p);
         let userId = pathParts[0]?.toLowerCase();
@@ -177,6 +175,12 @@
             return clean.startsWith('2') ? '+' + clean : '+2' + clean;
         }
 
+        function triggerZoom() {
+            if (formattedPlus) {
+                window.location.href = "zoomphonecall://" + formattedPlus;
+            }
+        }
+
         async function fetchLead() {
             if (!userId) return;
             pullBtn.innerText = "Searching... 🔍";
@@ -186,17 +190,13 @@
                 const response = await fetch(`/get-number/${userId}`);
                 const data = await response.json();
 
-                // 1. Check if the server actually has a number
                 if (data.phone && data.phone !== "No number yet") {
-                    
-                    // 2. NEW LOGIC: Check if the number is the SAME as what we already have
                     if (data.phone === currentNum) {
                         pullBtn.innerText = "Already Up to Date ✅";
                         setTimeout(() => { pullBtn.innerText = "📥 PULL NEW LEAD"; }, 2000);
-                        return; // Exit here so we don't flash/vibrate
+                        return;
                     }
 
-                    // 3. If it's a NEW number, proceed with effects
                     currentNum = data.phone;
                     formattedIntl = getFormatted002(data.phone);
                     formattedPlus = getFormattedPlus(data.phone);
@@ -213,6 +213,11 @@
                     
                     sync.innerText = "Lead Pulled: " + new Date().toLocaleTimeString();
                     pullBtn.innerText = "📥 PULL NEW LEAD";
+
+                    // Trigger Auto Zoom if enabled
+                    if (autoZoomToggle.checked) {
+                        triggerZoom();
+                    }
                 } else {
                     pullBtn.innerText = "No New Leads ❌";
                     setTimeout(() => { pullBtn.innerText = "📥 PULL NEW LEAD"; }, 2000);
@@ -225,13 +230,7 @@
             }
         }
 
-        // Zoom Click Logic
-        zoomBtn.onclick = () => {
-            if (formattedPlus) {
-                window.location.href = "zoomphonecall://" + formattedPlus;
-                // window.location.href = "zoomphonecall://" + "+201226162163";
-            }
-        };
+        zoomBtn.onclick = triggerZoom;
 
         copyBtn.onclick = () => {
             if (formattedIntl) {
