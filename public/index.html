@@ -3,245 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <script>
-    (function() {
-        const pathParts = window.location.pathname.split('/').filter(p => p);
-        const agentName = pathParts[0] || "Agent";
-        const capitalizedAgent = agentName.charAt(0).toUpperCase() + agentName.slice(1);
-
-        const myDynamicManifest = {
-            "name": `CRM Dialer - ${capitalizedAgent}`,
-            "short_name": capitalizedAgent,
-            "start_url": window.location.href,
-            "display": "standalone",
-            "background_color": "#000000",
-            "theme_color": "#000000",
-            "icons": [{
-                "src": "https://cdn-icons-png.flaticon.com/512/5585/5585856.png",
-                "sizes": "512x512",
-                "type": "image/png",
-                "purpose": "any maskable"
-            }]
-        };
-
-        const stringManifest = JSON.stringify(myDynamicManifest);
-        const blob = new Blob([stringManifest], {type: 'application/json'});
-        const manifestURL = URL.createObjectURL(blob);
-        
-        const link = document.createElement('link');
-        link.rel = 'manifest';
-        link.href = manifestURL;
-        document.head.appendChild(link);
-    })();
-    </script>
-    
     <title>CRM Dialer - Agent Portal</title>
     <style>
         * { box-sizing: border-box; }
+        body { font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; margin: 0; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0; transition: background-color 0.2s; overflow: hidden; }
         
-        body { 
-            font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-            background: #000; color: #fff; 
-            display: flex; flex-direction: column; align-items: center; 
-            justify-content: space-between; height: 100vh; margin: 0; 
-            padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0; 
-            transition: background-color 0.2s;
-            overflow: hidden;
-        }
-
-        #auto-zoom-container {
-            position: absolute; top: 15px; right: 15px; z-index: 50; 
-            display: flex; align-items: center; gap: 8px; 
-            font-size: 12px; font-weight: bold; color: #888;
-        }
-
-        .info { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 40px; }
-
+        #auto-mode-container { position: absolute; top: 15px; right: 15px; z-index: 50; display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: bold; color: #888; background: #111; padding: 10px; border-radius: 10px; border: 1px solid #333; }
+        .info { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 60px; }
         .button-container { width: 85%; display: flex; flex-direction: column; gap: 12px; align-items: center; }
-
-        #pull-btn {
-            width: 100%; height: 10vh; background: #3498db; color: white;
-            border: none; border-radius: 20px; font-size: 20px; font-weight: 800;
-            cursor: pointer; box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        #dial-btn {
-            width: 100%; height: 35vh; display: flex; 
-            align-items: center; justify-content: center;
-            background: #2ecc71; color: white; text-decoration: none; 
-            font-size: 38px; font-weight: 800; border-radius: 30px; 
-            text-align: center; box-shadow: 0 10px 30px rgba(46, 204, 113, 0.3);
-            border: 4px solid rgba(255,255,255,0.1);
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        #zoom-btn, #copy-btn {
-            width: 100%; height: 8vh; display: none; 
-            align-items: center; justify-content: center;
-            border-radius: 20px; border: none; cursor: pointer;
-            font-size: 18px; font-weight: 700;
-            -webkit-tap-highlight-color: transparent;
-        }
-
+        #pull-btn { width: 100%; height: 10vh; background: #3498db; color: white; border: none; border-radius: 20px; font-size: 20px; font-weight: 800; cursor: pointer; }
+        #dial-btn { width: 100%; height: 35vh; display: flex; align-items: center; justify-content: center; background: #2ecc71; color: white; text-decoration: none; font-size: 38px; font-weight: 800; border-radius: 30px; border: 4px solid rgba(255,255,255,0.1); }
+        #zoom-btn, #copy-btn { width: 100%; height: 8vh; display: none; align-items: center; justify-content: center; border-radius: 20px; border: none; cursor: pointer; font-size: 18px; font-weight: 700; }
         #zoom-btn { background: #2D8CFF; color: white; }
         #copy-btn { background: #333; color: #fff; border: 1px solid #444; }
-
-        #pull-btn:active, #zoom-btn:active, #copy-btn:active { transform: scale(0.96); opacity: 0.9; }
-        #dial-btn:active { transform: scale(0.96); filter: brightness(0.9); }
-
         .footer { color: #444; font-size: 12px; text-align: center; margin-bottom: 10px; }
-        
-        #overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.98); z-index: 100;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 22px; font-weight: bold; color: #2ecc71; text-align: center; cursor: pointer;
-        }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; color: #2ecc71; text-align: center; cursor: pointer; }
     </style>
 </head>
 <body>
-
     <div id="overlay">TAP TO START <br> AGENT SESSION</div>
-
-    <div id="auto-zoom-container">
-        <input type="checkbox" id="auto-zoom-toggle">
-        <label for="auto-zoom-toggle">AUTO ZOOM</label>
+    <div id="auto-mode-container">
+        <div style="margin-bottom: 5px; color: #fff;">AUTO MODE:</div>
+        <label><input type="radio" name="autoMode" value="none" checked> None</label>
+        <label><input type="radio" name="autoMode" value="zoom"> Auto Zoom</label>
+        <label><input type="radio" name="autoMode" value="phone"> Auto Phone</label>
     </div>
-
     <div class="info" id="agent-label">Agent: Loading...</div>
-    
     <div class="button-container">
         <button id="pull-btn">📥 PULL NEW LEAD</button>
         <a id="dial-btn" href="javascript:void(0)">No Lead</a>
         <button id="zoom-btn">📞 Zoom Call</button>
         <button id="copy-btn">📋 Copy Number (002)</button>
     </div>
-    
     <div class="footer" id="last-sync">Ready to pull.</div>
 
     <script>
-        const btn = document.getElementById('dial-btn');
-        const zoomBtn = document.getElementById('zoom-btn');
-        const copyBtn = document.getElementById('copy-btn');
-        const pullBtn = document.getElementById('pull-btn');
-        const sync = document.getElementById('last-sync');
-        const overlay = document.getElementById('overlay');
-        const agentLabel = document.getElementById('agent-label');
-        const autoZoomToggle = document.getElementById('auto-zoom-toggle');
+        const btn = document.getElementById('dial-btn'), zoomBtn = document.getElementById('zoom-btn'), copyBtn = document.getElementById('copy-btn'), pullBtn = document.getElementById('pull-btn'), sync = document.getElementById('last-sync'), overlay = document.getElementById('overlay'), agentLabel = document.getElementById('agent-label');
+        let currentNum = "", formattedIntl = "", formattedPlus = "", vibrationUnlocked = false;
 
-        let currentNum = "";
-        let formattedIntl = "";
-        let formattedPlus = "";
-        let vibrationUnlocked = false;
+        const savedMode = localStorage.getItem('autoMode') || 'none';
+        document.querySelector(`input[value="${savedMode}"]`).checked = true;
+        document.querySelectorAll('input[name="autoMode"]').forEach(r => r.addEventListener('change', (e) => localStorage.setItem('autoMode', e.target.value)));
 
-        // Load Auto Zoom preference
-        autoZoomToggle.checked = localStorage.getItem('autoZoom') === 'true';
-        autoZoomToggle.addEventListener('change', () => {
-            localStorage.setItem('autoZoom', autoZoomToggle.checked);
-        });
-
-        const pathParts = window.location.pathname.split('/').filter(p => p);
-        let userId = pathParts[0]?.toLowerCase();
-
-        if (!userId || userId === "index.html") {
-            userId = prompt("Enter Agent Name:");
-            if (userId) window.location.href = "/" + userId;
-        }
-        
+        const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:");
         agentLabel.innerText = "Agent: " + userId;
 
-        window.addEventListener('click', () => {
-            if (!vibrationUnlocked) {
-                vibrationUnlocked = true;
-                overlay.style.display = 'none';
-                if (navigator.vibrate) navigator.vibrate(100);
-            }
-        }, { once: true });
+        window.addEventListener('click', () => { if(!vibrationUnlocked) { vibrationUnlocked = true; overlay.style.display = 'none'; } }, { once: true });
 
-        function getFormatted002(num) {
-            let clean = num.replace(/\D/g, ''); 
-            if (!clean.startsWith('002')) {
-                clean = clean.startsWith('2') ? '00' + clean : '002' + clean;
-            }
-            return clean;
-        }
-
-        function getFormattedPlus(num) {
-            let clean = num.replace(/\D/g, ''); 
-            if (clean.startsWith('00')) return '+' + clean.substring(2);
-            return clean.startsWith('2') ? '+' + clean : '+2' + clean;
-        }
-
-        function triggerZoom() {
-            if (formattedPlus) {
-                window.location.href = "zoomphonecall://" + formattedPlus;
-            }
-        }
+        function triggerZoom() { if (formattedPlus) window.location.href = "zoomphonecall://" + formattedPlus; }
 
         async function fetchLead() {
-            if (!userId) return;
-            pullBtn.innerText = "Searching... 🔍";
             pullBtn.disabled = true;
-
             try {
-                const response = await fetch(`/get-number/${userId}`);
-                const data = await response.json();
-
-                if (data.phone && data.phone !== "No number yet") {
-                    if (data.phone === currentNum) {
-                        pullBtn.innerText = "Already Up to Date ✅";
-                        setTimeout(() => { pullBtn.innerText = "📥 PULL NEW LEAD"; }, 2000);
-                        return;
-                    }
-
+                const data = await (await fetch(`/get-number/${userId}`)).json();
+                if (data.phone && data.phone !== "No number yet" && data.phone !== currentNum) {
                     currentNum = data.phone;
-                    formattedIntl = getFormatted002(data.phone);
-                    formattedPlus = getFormattedPlus(data.phone);
-                    
-                    btn.innerText = data.phone; 
-                    btn.href = "tel:" + formattedIntl;
-
-                    zoomBtn.style.display = 'flex';
-                    copyBtn.style.display = 'flex';
-                    
-                    document.body.style.backgroundColor = "#2ecc71";
-                    setTimeout(() => { document.body.style.backgroundColor = "#000"; }, 400);
-                    if (vibrationUnlocked && navigator.vibrate) navigator.vibrate([500, 100, 500]);
-                    
-                    sync.innerText = "Lead Pulled: " + new Date().toLocaleTimeString();
-                    pullBtn.innerText = "📥 PULL NEW LEAD";
-
-                    // Trigger Auto Zoom if enabled
-                    if (autoZoomToggle.checked) {
-                        triggerZoom();
-                    }
-                } else {
-                    pullBtn.innerText = "No New Leads ❌";
-                    setTimeout(() => { pullBtn.innerText = "📥 PULL NEW LEAD"; }, 2000);
+                    formattedIntl = data.phone.startsWith('002') ? data.phone : '002' + data.phone.replace(/\D/g, '');
+                    formattedPlus = '+' + formattedIntl.substring(2);
+                    btn.innerText = data.phone; btn.href = "tel:" + formattedIntl;
+                    zoomBtn.style.display = 'flex'; copyBtn.style.display = 'flex';
+                    if (localStorage.getItem('autoMode') === 'zoom') triggerZoom();
+                    else if (localStorage.getItem('autoMode') === 'phone') window.location.href = "tel:" + formattedIntl;
                 }
-            } catch (e) {
-                console.error("Fetch error:", e);
-                pullBtn.innerText = "Error! ⚠️";
-            } finally {
-                pullBtn.disabled = false;
-            }
+            } catch (e) { pullBtn.innerText = "Error! ⚠️"; } finally { pullBtn.disabled = false; }
         }
-
         zoomBtn.onclick = triggerZoom;
-
-        copyBtn.onclick = () => {
-            if (formattedIntl) {
-                navigator.clipboard.writeText(formattedIntl).then(() => {
-                    const originalText = copyBtn.innerText;
-                    copyBtn.innerText = "COPIED! ✅";
-                    setTimeout(() => copyBtn.innerText = originalText, 1500);
-                });
-            }
-        };
-
         pullBtn.onclick = fetchLead;
     </script>
 </body>
