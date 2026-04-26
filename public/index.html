@@ -33,12 +33,12 @@
         <button id="pull-btn">📥 PULL NEW LEAD</button>
         <a id="dial-btn" href="javascript:void(0)">No Lead</a>
         <button id="zoom-btn">📞 Zoom Call</button>
-        <button id="copy-btn">📋 Copy Number (002)</button>
+        <button id="copy-btn">📋 Copy Number</button>
     </div>
     <div class="footer" id="last-sync">Ready to pull.</div>
 
     <script>
-        const btn = document.getElementById('dial-btn'), zoomBtn = document.getElementById('zoom-btn'), copyBtn = document.getElementById('copy-btn'), pullBtn = document.getElementById('pull-btn'), sync = document.getElementById('last-sync'), overlay = document.getElementById('overlay'), agentLabel = document.getElementById('agent-label');
+        const btn = document.getElementById('dial-btn'), zoomBtn = document.getElementById('zoom-btn'), copyBtn = document.getElementById('copy-btn'), pullBtn = document.getElementById('pull-btn'), overlay = document.getElementById('overlay'), agentLabel = document.getElementById('agent-label');
         let currentNum = "", formattedIntl = "", formattedPlus = "", vibrationUnlocked = false;
 
         const savedMode = localStorage.getItem('autoMode') || 'none';
@@ -51,24 +51,47 @@
         window.addEventListener('click', () => { if(!vibrationUnlocked) { vibrationUnlocked = true; overlay.style.display = 'none'; } }, { once: true });
 
         function triggerZoom() { if (formattedPlus) window.location.href = "zoomphonecall://" + formattedPlus; }
+        
+        async function copyToClipboard() {
+            try {
+                await navigator.clipboard.writeText(formattedIntl);
+                const originalText = copyBtn.innerText;
+                copyBtn.innerText = "✅ Copied!";
+                setTimeout(() => copyBtn.innerText = originalText, 2000);
+            } catch (err) { alert("Failed to copy"); }
+        }
 
         async function fetchLead() {
             pullBtn.disabled = true;
             try {
-                const data = await (await fetch(`/get-number/${userId}`)).json();
+                const response = await fetch(`/get-number/${userId}`);
+                const data = await response.json();
                 if (data.phone && data.phone !== "No number yet" && data.phone !== currentNum) {
                     currentNum = data.phone;
-                    formattedIntl = data.phone.startsWith('002') ? data.phone : '002' + data.phone.replace(/\D/g, '');
-                    formattedPlus = '+' + formattedIntl.substring(2);
-                    btn.innerText = data.phone; btn.href = "tel:" + formattedIntl;
-                    zoomBtn.style.display = 'flex'; copyBtn.style.display = 'flex';
+                    
+                    if (data.phone.startsWith('00')) {
+                        formattedIntl = data.phone;
+                        formattedPlus = '+' + data.phone.substring(2);
+                    } else {
+                        formattedIntl = '002' + data.phone.replace(/\D/g, '');
+                        formattedPlus = '+' + data.phone.replace(/\D/g, '');
+                    }
+
+                    btn.innerText = data.phone; 
+                    btn.href = "tel:" + formattedIntl;
+                    copyBtn.innerText = `📋 Copy Number (${formattedIntl})`;
+                    zoomBtn.style.display = 'flex'; 
+                    copyBtn.style.display = 'flex';
+                    
                     if (localStorage.getItem('autoMode') === 'zoom') triggerZoom();
                     else if (localStorage.getItem('autoMode') === 'phone') window.location.href = "tel:" + formattedIntl;
                 }
             } catch (e) { pullBtn.innerText = "Error! ⚠️"; } finally { pullBtn.disabled = false; }
         }
+        
         zoomBtn.onclick = triggerZoom;
         pullBtn.onclick = fetchLead;
+        copyBtn.onclick = copyToClipboard;
     </script>
 </body>
 </html>
