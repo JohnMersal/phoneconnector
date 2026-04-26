@@ -39,7 +39,7 @@
 
     <script>
         const btn = document.getElementById('dial-btn'), zoomBtn = document.getElementById('zoom-btn'), copyBtn = document.getElementById('copy-btn'), pullBtn = document.getElementById('pull-btn'), overlay = document.getElementById('overlay'), agentLabel = document.getElementById('agent-label');
-        let currentNum = "", formattedIntl = "", formattedPlus = "", vibrationUnlocked = false;
+        let currentNum = "", formattedIntl = "", vibrationUnlocked = false;
 
         const savedMode = localStorage.getItem('autoMode') || 'none';
         document.querySelector(`input[value="${savedMode}"]`).checked = true;
@@ -50,7 +50,13 @@
 
         window.addEventListener('click', () => { if(!vibrationUnlocked) { vibrationUnlocked = true; overlay.style.display = 'none'; } }, { once: true });
 
-        function triggerZoom() { if (formattedPlus) window.location.href = "zoomphonecall://" + formattedPlus; }
+        function triggerZoom() { 
+            if (formattedIntl) {
+                // Convert 00 to + for the zoom protocol
+                const zoomFormat = formattedIntl.startsWith('00') ? '+' + formattedIntl.substring(2) : '+' + formattedIntl;
+                window.location.href = "zoomphonecall://" + zoomFormat; 
+            }
+        }
         
         async function copyToClipboard() {
             try {
@@ -69,13 +75,8 @@
                 if (data.phone && data.phone !== "No number yet" && data.phone !== currentNum) {
                     currentNum = data.phone;
                     
-                    if (data.phone.startsWith('00')) {
-                        formattedIntl = data.phone;
-                        formattedPlus = '+' + data.phone.substring(2);
-                    } else {
-                        formattedIntl = '002' + data.phone.replace(/\D/g, '');
-                        formattedPlus = '+' + data.phone.replace(/\D/g, '');
-                    }
+                    // Unified Formatting: If international (00), use as is. If local, add 002.
+                    formattedIntl = data.phone.startsWith('00') ? data.phone : '002' + data.phone.replace(/\D/g, '');
 
                     btn.innerText = data.phone; 
                     btn.href = "tel:" + formattedIntl;
