@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -108,6 +108,111 @@ overlay.addEventListener('pointerdown', (e) => {
         
         zoomBtn.onclick = triggerZoom;
         copyBtn.onclick = copyToClipboard;
+        pullBtn.onclick = fetchLead;
+    </script>
+</body>
+</html> -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>CRM Dialer</title>
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --primary: #3b82f6; --accent: #10b981; --text: #f8fafc; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
+        
+        /* Header/Agent Info */
+        .top-bar { width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .agent-info { font-size: 14px; opacity: 0.8; }
+        #agent-name { font-weight: bold; color: var(--primary); }
+
+        /* Auto-mode Dropdown */
+        select { background: var(--card); color: white; border: 1px solid #334155; padding: 8px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; outline: none; }
+
+        /* Main Card */
+        .container { width: 100%; max-width: 400px; background: var(--card); padding: 24px; border-radius: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 1px solid #334155; }
+        
+        #pull-btn { width: 100%; padding: 16px; background: var(--primary); color: white; border: none; border-radius: 16px; font-weight: 700; cursor: pointer; margin-bottom: 20px; transition: opacity 0.2s; }
+        #pull-btn:active { opacity: 0.8; }
+
+        .lead-display { background: var(--accent); padding: 30px 20px; border-radius: 16px; text-align: center; margin-bottom: 20px; }
+        .lead-display div { font-size: 12px; opacity: 0.9; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .lead-display h1 { font-size: 32px; margin: 0; }
+
+        .action-link { width: 100%; padding: 16px; margin-bottom: 10px; display: none; align-items: center; justify-content: center; text-decoration: none; border-radius: 16px; font-weight: 600; color: white; transition: filter 0.2s; }
+        #zoom-btn { background: #2563eb; }
+        #copy-btn { background: #334155; }
+        
+        #overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="overlay">TAP TO START AGENT SESSION</div>
+
+    <div class="top-bar">
+        <div class="agent-info">Agent: <span id="agent-name">...</span></div>
+        <select id="auto-mode-select">
+            <option value="none">Auto: None</option>
+            <option value="zoom">Auto: Zoom</option>
+            <option value="phone">Auto: Phone</option>
+        </select>
+    </div>
+
+    <div class="container">
+        <button id="pull-btn">🔄 Pull New Lead</button>
+        <div class="lead-display">
+            <div>Current Lead</div>
+            <h1 id="lead-num">---</h1>
+        </div>
+        <a id="zoom-btn" class="action-link" href="javascript:void(0)">🎥 Zoom Call</a>
+        <a id="copy-btn" class="action-link" href="javascript:void(0)">📋 Copy Number</a>
+    </div>
+
+    <script>
+        const leadNum = document.getElementById('lead-num'),
+              zoomBtn = document.getElementById('zoom-btn'),
+              copyBtn = document.getElementById('copy-btn'),
+              pullBtn = document.getElementById('pull-btn'),
+              overlay = document.getElementById('overlay'),
+              agentLabel = document.getElementById('agent-name'),
+              modeSelect = document.getElementById('auto-mode-select');
+        
+        let currentNum = "", formattedIntl = "";
+
+        // Initialization
+        const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:");
+        agentLabel.innerText = userId;
+        modeSelect.value = localStorage.getItem('autoMode') || 'none';
+        modeSelect.addEventListener('change', (e) => localStorage.setItem('autoMode', e.target.value));
+
+        overlay.addEventListener('pointerdown', (e) => { e.preventDefault(); overlay.style.display = 'none'; }, { once: true });
+
+        async function fetchLead() {
+            pullBtn.disabled = true;
+            try {
+                const response = await fetch(`/get-number/${userId}`);
+                const data = await response.json();
+                if (data.phone) {
+                    currentNum = data.phone;
+                    formattedIntl = data.phone.startsWith('00') ? data.phone : '002' + data.phone.replace(/\D/g, '');
+                    
+                    leadNum.innerText = data.phone;
+                    zoomBtn.style.display = 'flex';
+                    copyBtn.style.display = 'flex';
+                    copyBtn.innerText = `📋 Copy (${formattedIntl})`;
+                    
+                    if (modeSelect.value === 'zoom') window.location.href = "zoomphonecall://+" + formattedIntl.replace(/\D/g, '');
+                    else if (modeSelect.value === 'phone') window.location.href = "tel:" + formattedIntl;
+                }
+            } catch (e) { alert("Error fetching lead"); } finally { pullBtn.disabled = false; }
+        }
+
+        zoomBtn.onclick = () => window.location.href = "zoomphonecall://+" + formattedIntl.replace(/\D/g, '');
+        copyBtn.onclick = () => navigator.clipboard.writeText(formattedIntl).then(() => alert("Copied!"));
         pullBtn.onclick = fetchLead;
     </script>
 </body>
