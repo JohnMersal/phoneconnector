@@ -1,227 +1,478 @@
 <!DOCTYPE html>
-
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-
     <title>CRM Dialer - Agent Portal</title>
-
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-dark: #1a1e29;
+            --card-dark: #232838;
+            --card-border: #333a4d;
+            --primary-blue: #4b7afe;
+            --primary-blue-hover: #3a62d6;
+            --primary-green: #45a675;
+            --btn-dark: #363c4f;
+            --btn-dark-hover: #4b5563;
+            --text-muted: #8b94a5;
+            --text-white: #ffffff;
+        }
 
-        * { box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-        body { font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; margin: 0; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0; transition: background-color 0.2s; overflow: hidden; }
+        body {
+            background: linear-gradient(135deg, #0f172b, #1d293d 50%, #0f172b);
+            color: var(--text-white);
+            font-family: 'Inter', system-ui, sans-serif;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
 
-        
+        /* Overlay */
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.95);
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-green);
+            font-size: 24px;
+            line-height: 32px;
+            font-weight: 700;
+            cursor: pointer;
+            text-align: center;
+            transition: opacity 0.3s ease;
+        }
 
-        #auto-mode-container { position: absolute; top: 15px; right: 15px; z-index: 50; display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: bold; color: #888; background: #111; padding: 10px; border-radius: 10px; border: 1px solid #333; }
+        /* Container */
+        .container {
+            width: 100%;
+            max-width: 448px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
 
-        .info { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 60px; }
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
 
-        .button-container { width: 85%; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+        .agent-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
 
-        
+        .agent-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background-color: var(--primary-blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-white);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
 
-        #pull-btn { width: 100%; height: 10vh; background: #3498db; color: white; border: none; border-radius: 20px; font-size: 20px; font-weight: 800; cursor: pointer; appearance: none; }
+        .agent-details {
+            display: flex;
+            flex-direction: column;
+        }
 
-        
+        .agent-label {
+            color: var(--text-muted);
+            font-size: 14px;
+            font-weight: 500;
+            line-height: 1.25;
+        }
 
-        .action-link { width: 100%; display: none; align-items: center; justify-content: center; text-decoration: none; border-radius: 20px; font-weight: 700; font-size: 18px; color: white; }
+        .agent-name {
+            font-size: 13px;
+            margin-top:4px;
+            line-height: 1.25;
+            text-transform: uppercase;
+        }
 
-        #dial-btn { height: 35vh; font-size: 38px; border-radius: 30px; background: #2ecc71; border: 4px solid rgba(255,255,255,0.1); }
+        /* Auto Mode Select */
+        .auto-mode-wrapper {
+            position: relative;
+        }
 
-        #zoom-btn { height: 8vh; background: #2D8CFF; }
+        .auto-mode-select {
+            background-color: transparent;
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 8px 32px 8px 16px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-white);
+            font-family: inherit;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            transition: background-color 0.2s, border-color 0.2s;
+            outline: none;
+        }
 
-        #copy-btn { height: 8vh; background: #333; border: 1px solid #444; }
+        .auto-mode-select:hover {
+            background-color: var(--card-dark);
+        }
 
-        
+        .auto-mode-select:focus {
+            border-color: var(--text-muted);
+            box-shadow: 0 0 0 1px var(--text-muted);
+        }
 
-        .footer { color: #444; font-size: 12px; text-align: center; margin-bottom: 10px; }
+        .auto-mode-select option {
+            background-color: var(--bg-dark);
+            color: var(--text-white);
+        }
 
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 100; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; color: #2ecc71; text-align: center; cursor: pointer; }
+        .select-arrow {
+            pointer-events: none;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 12px;
+            display: flex;
+            align-items: center;
+        }
 
+        .select-arrow svg {
+            height: 16px;
+            width: 16px;
+            color: var(--text-muted);
+        }
+
+        /* Main Card */
+        .main-card {
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--card-dark);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Buttons */
+        button {
+            font-family: inherit;
+            border: none;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .pull-btn {
+            width: 100%;
+            background-color: var(--primary-blue);
+            color: var(--text-white);
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 18px;
+            transition: background-color 0.2s;
+        }
+
+        .pull-btn:hover:not(:disabled) {
+            background-color: var(--primary-blue-hover);
+        }
+
+        .pull-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .pull-btn svg {
+            width: 20px;
+            height: 20px;
+            transition: transform 0.5s ease;
+        }
+
+        .pull-btn:hover:not(:disabled) svg {
+            transform: rotate(180deg);
+        }
+
+        /* Lead Display */
+        .lead-display {
+            background-color: var(--primary-green);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 16px;
+            text-align: center;
+        }
+
+        .lead-label {
+            color: var(--text-white);
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
+            letter-spacing: 0.025em;
+        }
+
+        .lead-number {
+            font-size: 36px;
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            color: var(--text-white);
+            text-decoration: none;
+            transition: opacity 0.2s;
+            word-break: break-all;
+            filter: drop-shadow(0 4px 3px rgba(0,0,0,0.07));
+        }
+
+        @media (min-width: 640px) {
+            .lead-number {
+                font-size: 48px;
+            }
+        }
+
+        .lead-number:hover {
+            opacity: 0.9;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .action-btn {
+            width: 100%;
+            border-radius: 12px;
+            padding: 14px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--text-white);
+            transition: background-color 0.2s;
+        }
+
+        .action-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        #zoom-btn {
+            background-color: var(--primary-blue);
+        }
+
+        #zoom-btn:hover {
+            background-color: var(--primary-blue-hover);
+        }
+
+        #copy-btn {
+            background-color: var(--btn-dark);
+            border: 1px solid var(--card-border);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        #copy-btn:hover {
+            background-color: var(--btn-dark-hover);
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
     </style>
-
 </head>
-
 <body>
 
-    <div id="overlay">TAP TO START <br> AGENT SESSION</div>
-
-    <div id="auto-mode-container">
-
-        <div style="margin-bottom: 5px; color: #fff;">AUTO MODE:</div>
-
-        <label><input type="radio" name="autoMode" value="none" checked> None</label>
-
-        <label><input type="radio" name="autoMode" value="zoom"> Auto Zoom</label>
-
-        <label><input type="radio" name="autoMode" value="phone"> Auto Phone</label>
-
+    <!-- Start Overlay -->
+    <div id="overlay">
+        TAP TO START <br> AGENT SESSION
     </div>
 
-    <div class="info" id="agent-label">Agent: Loading...</div>
+    <!-- Main Container -->
+    <div class="container">
+        
+        <!-- Header -->
+        <div class="header">
+            <div class="agent-info">
+                <div class="agent-avatar" id="agent-initial">J</div>
+                <div class="agent-details">
+                    <span class="agent-label">Agent</span>
+                    <span class="agent-name" id="agent-name">Loading...</span>
+                </div>
+            </div>
+            
+            <!-- Auto Mode Select -->
+            <div class="auto-mode-wrapper">
+                <select id="autoModeSelect" class="auto-mode-select">
+                    <option value="none">Auto Mode: None</option>
+                    <option value="zoom">Auto Mode: Zoom</option>
+                    <option value="phone">Auto Mode: Phone</option>
+                </select>
+                <!-- Custom Arrow -->
+                <div class="select-arrow">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+            </div>
+        </div>
 
-    <div class="button-container">
+        <!-- Main Card -->
+        <div class="main-card">
+            
+            <!-- Pull Lead Button -->
+            <button id="pull-btn" class="pull-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg> 
+                Pull New Lead
+            </button>
 
-        <button id="pull-btn">📥 PULL NEW LEAD</button>
+            <!-- Current Lead Display -->
+            <div class="lead-display">
+                <span class="lead-label">Current Lead</span>
+                <a id="dial-btn" href="javascript:void(0)" class="lead-number">No Lead</a>
+            </div>
 
-        <a id="dial-btn" class="action-link" href="javascript:void(0)" style="display: flex;">No Lead</a>
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button id="zoom-btn" class="action-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path><rect x="2" y="6" width="14" height="12" rx="2"></rect></svg> 
+                    Zoom Call
+                </button>
 
-        <a id="zoom-btn" class="action-link" href="javascript:void(0)">📞 Zoom Call</a>
+                <button id="copy-btn" class="action-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                    <span id="copy-text">Copy Number</span>
+                </button>
+            </div>
+        </div>
 
-        <a id="copy-btn" class="action-link" href="javascript:void(0)">📋 Copy Number</a>
-
+        <!-- Footer -->
+        <div class="footer" id="last-sync">
+            Ready to pull.
+        </div>
     </div>
-
-    <div class="footer" id="last-sync">Ready to pull.</div>
-
-
 
     <script>
-
         const dialBtn = document.getElementById('dial-btn'), 
-
               zoomBtn = document.getElementById('zoom-btn'), 
-
               copyBtn = document.getElementById('copy-btn'), 
-
+              copyText = document.getElementById('copy-text'),
               pullBtn = document.getElementById('pull-btn'), 
-
               overlay = document.getElementById('overlay'), 
-
-              agentLabel = document.getElementById('agent-label');
-
+              agentName = document.getElementById('agent-name'),
+              agentInitial = document.getElementById('agent-initial'),
+              autoModeSelect = document.getElementById('autoModeSelect');
         
-
         let currentNum = "", formattedIntl = "", vibrationUnlocked = false;
 
-
-
+        // Auto Mode logic
         const savedMode = localStorage.getItem('autoMode') || 'none';
+        autoModeSelect.value = savedMode;
+        autoModeSelect.addEventListener('change', (e) => localStorage.setItem('autoMode', e.target.value));
 
-        document.querySelector(`input[value="${savedMode}"]`).checked = true;
+        // Agent Name logic
+        const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:") || "Agent";
+        agentName.innerText = userId;
+        agentInitial.innerText = userId.charAt(0).toUpperCase();
 
-        document.querySelectorAll('input[name="autoMode"]').forEach(r => r.addEventListener('change', (e) => localStorage.setItem('autoMode', e.target.value)));
-
-
-
-        const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:");
-
-        agentLabel.innerText = "Agent: " + userId;
-
-
-
-overlay.addEventListener('pointerdown', (e) => {
-
-    // This event fires for both mouse clicks and touch taps
-
-    e.preventDefault(); 
-
-    vibrationUnlocked = true;
-
-    overlay.style.display = 'none';
-
-}, { once: true, passive: false });
-
+        overlay.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); 
+            vibrationUnlocked = true;
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.style.display = 'none', 300);
+        }, { once: true, passive: false });
         
-
         function triggerZoom(e) { 
-
             if(e) e.preventDefault();
-
             if (formattedIntl) {
-
                 const zoomFormat = formattedIntl.startsWith('00') ? '+' + formattedIntl.substring(2) : '+' + formattedIntl;
-
                 window.location.href = "zoomphonecall://" + zoomFormat; 
-
             }
-
         }
-
         
-
         async function copyToClipboard(e) {
-
             e.preventDefault();
-
             try {
-
                 await navigator.clipboard.writeText(formattedIntl);
-
-                const originalText = copyBtn.innerText;
-
-                copyBtn.innerText = "✅ Copied!";
-
-                setTimeout(() => copyBtn.innerText = originalText, 2000);
-
+                const originalText = copyText.innerText;
+                copyText.innerText = "Copied!";
+                setTimeout(() => copyText.innerText = originalText, 2000);
             } catch (err) { alert("Failed to copy"); }
-
         }
-
-
 
         async function fetchLead() {
-
             pullBtn.disabled = true;
-
             try {
-
-                const response = await fetch(`/get-number/${userId}`);
-
-                const data = await response.json();
-
+                // --- TEMPORARY MOCK FOR TESTING UI ---
+                // const response = await fetch(`/get-number/${userId}`);
+                // const data = await response.json();
+                const data = await new Promise(resolve => setTimeout(() => resolve({ phone: "01225692847" }), 400));
+                // -------------------------------------
+                
                 if (data.phone && data.phone !== "No number yet" && data.phone !== currentNum) {
-
                     currentNum = data.phone;
-
                     
-
                     // Unified Formatting Logic
-
                     formattedIntl = data.phone.startsWith('00') ? data.phone : '002' + data.phone.replace(/\D/g, '');
 
-
-
                     dialBtn.innerText = data.phone; 
-
                     dialBtn.href = "tel:" + formattedIntl;
-
-                    copyBtn.innerText = `📋 Copy Number (${formattedIntl})`;
-
+                    copyText.innerText = `Copy Number (${data.phone})`;
                     
-
                     zoomBtn.style.display = 'flex'; 
-
                     copyBtn.style.display = 'flex';
-
                     
-
                     if (localStorage.getItem('autoMode') === 'zoom') triggerZoom();
-
                     else if (localStorage.getItem('autoMode') === 'phone') window.location.href = "tel:" + formattedIntl;
-
                 }
-
-            } catch (e) { pullBtn.innerText = "Error! ⚠️"; } finally { pullBtn.disabled = false; }
-
+            } catch (e) { 
+                console.error(e);
+            } finally { 
+                pullBtn.disabled = false; 
+            }
         }
-
         
-
         zoomBtn.onclick = triggerZoom;
-
         copyBtn.onclick = copyToClipboard;
-
         pullBtn.onclick = fetchLead;
 
+        // TEMPORARY: Auto-trigger to view the active state immediately
+        setTimeout(fetchLead, 500);
     </script>
-
 </body>
-
 </html>
