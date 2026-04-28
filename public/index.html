@@ -57,9 +57,9 @@
         const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:");
         agentLabel.innerText = "Agent: " + userId;
 
-// Replace your existing window.addEventListener line with this:
-overlay.addEventListener('touchstart', (e) => {
-    e.preventDefault(); // Prevents "ghost clicks" and double-firing on iOS
+overlay.addEventListener('pointerdown', (e) => {
+    // This event fires for both mouse clicks and touch taps
+    e.preventDefault(); 
     vibrationUnlocked = true;
     overlay.style.display = 'none';
 }, { once: true, passive: false });
