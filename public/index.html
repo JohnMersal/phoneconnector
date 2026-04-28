@@ -57,8 +57,13 @@
         const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:");
         agentLabel.innerText = "Agent: " + userId;
 
-        window.addEventListener('click', () => { if(!vibrationUnlocked) { vibrationUnlocked = true; overlay.style.display = 'none'; } }, { once: true });
-
+// Replace your existing window.addEventListener line with this:
+overlay.addEventListener('touchstart', (e) => {
+    e.preventDefault(); // Prevents "ghost clicks" and double-firing on iOS
+    vibrationUnlocked = true;
+    overlay.style.display = 'none';
+}, { once: true, passive: false });
+        
         function triggerZoom(e) { 
             if(e) e.preventDefault();
             if (formattedIntl) {
