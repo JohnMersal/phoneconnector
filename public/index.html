@@ -438,11 +438,8 @@
         async function fetchLead() {
             pullBtn.disabled = true;
             try {
-                // --- TEMPORARY MOCK FOR TESTING UI ---
-                // const response = await fetch(`/get-number/${userId}`);
-                // const data = await response.json();
-                const data = await new Promise(resolve => setTimeout(() => resolve({ phone: "01225692847" }), 400));
-                // -------------------------------------
+                const response = await fetch(`/get-number/${userId}`);
+                const data = await response.json();
                 
                 if (data.phone && data.phone !== "No number yet" && data.phone !== currentNum) {
                     currentNum = data.phone;
@@ -470,9 +467,6 @@
         zoomBtn.onclick = triggerZoom;
         copyBtn.onclick = copyToClipboard;
         pullBtn.onclick = fetchLead;
-
-        // TEMPORARY: Auto-trigger to view the active state immediately
-        setTimeout(fetchLead, 500);
     </script>
 </body>
 </html>
