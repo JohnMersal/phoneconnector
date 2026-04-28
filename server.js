@@ -18,17 +18,17 @@ let userStore = {};
    ========================================== */
 app.post('/set-number/:userId', (req, res) => {
     const { userId } = req.params;
-    const { phone } = req.body;
+    const { phone, name, location } = req.body;
     
     if (phone && userId) {
         const normalizedId = userId.toLowerCase();
-        userStore[normalizedId] = phone;
+        userStore[normalizedId] = { phone, name, location };
         
         // Log the successful update with timestamp
         const timestamp = new Date().toISOString();
-        console.log(`[${timestamp}] [CRM] Updated ${normalizedId}: ${phone}`);
+        console.log(`[${timestamp}] [CRM] Updated ${normalizedId}: ${phone} (${name || 'No Name'})`);
         
-        return res.json({ success: true, agent: normalizedId, number: phone });
+        return res.json({ success: true, agent: normalizedId, number: phone, name, location });
     }
     
     console.warn(`[${new Date().toISOString()}] [CRM] Failed update attempt: Missing data`);
@@ -40,9 +40,9 @@ app.post('/set-number/:userId', (req, res) => {
    ========================================== */
 app.get('/get-number/:userId', (req, res) => {
     const userId = req.params.userId.toLowerCase();
-    const number = userStore[userId] || "No number yet";
+    const data = userStore[userId] || { phone: "No number yet" };
     
-    res.json({ phone: number });
+    res.json(data);
 });
 
 /* ==========================================

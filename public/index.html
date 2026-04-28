@@ -366,6 +366,11 @@
             <div class="lead-display">
                 <span class="lead-label">Current Lead</span>
                 <a id="dial-btn" href="javascript:void(0)" class="lead-number">No Lead</a>
+                
+                <div id="lead-details" style="display: none; flex-direction: column; margin-top: 16px; gap: 4px;">
+                    <span id="lead-name" style="font-weight: 600; font-size: 18px; color: var(--text-white);"></span>
+                    <span id="lead-location" style="font-size: 14px; color: rgba(255,255,255,0.8);"></span>
+                </div>
             </div>
 
             <!-- Action Buttons -->
@@ -454,6 +459,15 @@
                     
                     zoomBtn.style.display = 'flex'; 
                     copyBtn.style.display = 'flex';
+
+                    // Update Name and Location if provided
+                    if (data.name || data.location) {
+                        document.getElementById('lead-details').style.display = 'flex';
+                        document.getElementById('lead-name').innerText = data.name || '';
+                        document.getElementById('lead-location').innerText = data.location || '';
+                    } else {
+                        document.getElementById('lead-details').style.display = 'none';
+                    }
                     
                     if (localStorage.getItem('autoMode') === 'zoom') triggerZoom();
                     else if (localStorage.getItem('autoMode') === 'phone') window.location.href = "tel:" + formattedIntl;
