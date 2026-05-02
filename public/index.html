@@ -548,8 +548,8 @@
                     // Unified Formatting Logic
                     formattedIntl = data.phone.startsWith('00') ? data.phone : '002' + data.phone.replace(/\D/g, '');
 
-                    dialBtn.innerText = data.phone;
-                    dialBtn.href = "tel:" + currentNum;
+                    dialBtn.innerText = "curnum" + data.phone;
+                    dialBtn.href = "tel:" + data.phone;
                     copyText.innerText = `Copy (${data.phone})`;
 
                     zoomBtn.style.display = 'flex';
