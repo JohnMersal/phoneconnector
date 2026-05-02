@@ -548,7 +548,7 @@
                     // Unified Formatting Logic
                     formattedIntl = data.phone.startsWith('00') ? data.phone : '002' + data.phone.replace(/\D/g, '');
 
-                    dialBtn.innerText = "curnum" + data.phone;
+                    dialBtn.innerText = data.phone;
                     dialBtn.href = "tel:" + data.phone;
                     copyText.innerText = `Copy (${data.phone})`;
 
@@ -566,7 +566,7 @@
                     }
 
                     if (localStorage.getItem('autoMode') === 'zoom') triggerZoom();
-                    else if (localStorage.getItem('autoMode') === 'phone') window.location.href = "tel:" + formattedIntl;
+                    else if (localStorage.getItem('autoMode') === 'phone') window.location.href = "tel:" + data.phone;
                 } else {
                     // Feedback for no new leads
                     pullBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg> All up to date`;
