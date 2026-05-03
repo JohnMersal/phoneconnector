@@ -479,6 +479,7 @@
             leadDisplay = document.getElementById('lead-display');
 
         let currentNum = "", formattedIntl = "", vibrationUnlocked = false;
+        const notifSound = new Audio('/notif.wav');
 
         // Auto Mode logic
         const savedMode = localStorage.getItem('autoMode') || 'none';
@@ -493,6 +494,13 @@
         overlay.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             vibrationUnlocked = true;
+
+            // Prime audio for mobile
+            notifSound.play().then(() => {
+                notifSound.pause();
+                notifSound.currentTime = 0;
+            }).catch(e => console.log("Audio prime error:", e));
+
             overlay.style.opacity = '0';
             setTimeout(() => overlay.style.display = 'none', 300);
         }, { once: true, passive: false });
@@ -535,9 +543,10 @@
                 if (data.phone && data.phone !== "No number yet" && data.phone !== currentNum) {
                     currentNum = data.phone;
 
-                    // Trigger haptic feedback (vibration) if supported
-                    if (navigator.vibrate && vibrationUnlocked) {
-                        navigator.vibrate([500, 100, 200]);
+                    // Trigger haptic feedback (vibration) and sound if supported
+                    if (vibrationUnlocked) {
+                        if (navigator.vibrate) navigator.vibrate([200, 200]);
+                        notifSound.play().catch(e => console.log("Audio play error:", e));
                     }
 
                     // Trigger visual flash animation
