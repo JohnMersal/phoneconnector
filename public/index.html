@@ -553,6 +553,7 @@
 
         let currentNum = "", formattedIntl = "", vibrationUnlocked = false;
         const notifSound = new Audio('/notif.wav');
+        notifSound.volume = 0.5;
 
         // Auto Mode logic
         const savedMode = localStorage.getItem('autoMode') || 'none';
