@@ -358,6 +358,72 @@
             font-size: 12px;
             font-weight: 500;
             text-transform: uppercase;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Mute Switch - iOS Style */
+        .mute-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            user-select: none;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 100px;
+            border: 1px solid var(--card-border);
+            transition: all 0.2s ease;
+        }
+
+        .mute-wrapper:active {
+            transform: scale(0.98);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .mute-checkbox {
+            appearance: none;
+            width: 44px;
+            height: 24px;
+            background: #39393d;
+            border-radius: 100px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            outline: none;
+            flex-shrink: 0;
+        }
+
+        .mute-checkbox:checked {
+            background: #34c759; /* iOS Green */
+        }
+
+        .mute-checkbox::before {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            background: white;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .mute-checkbox:checked::before {
+            transform: translateX(20px);
+        }
+
+        .mute-label {
+            font-size: 12px;
+            color: var(--text-white);
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            opacity: 0.8;
         }
     </style>
 </head>
@@ -460,9 +526,15 @@
         </div>
 
         <!-- Footer -->
-        <!-- <div class="footer" id="last-sync">
-            Ready to pull.
-        </div> -->
+        <div class="footer">
+            <label class="mute-wrapper">
+                <input type="checkbox" id="mute-checkbox" class="mute-checkbox">
+                <span class="mute-label">MUTE NOTIFICATIONS</span>
+            </label>
+            <div id="last-sync" style="opacity: 0.5;">
+                Ready to pull.
+            </div>
+        </div>
     </div>
 
     <script>
@@ -476,7 +548,8 @@
             agentName = document.getElementById('agent-name'),
             agentInitial = document.getElementById('agent-initial'),
             autoModeSelect = document.getElementById('autoModeSelect'),
-            leadDisplay = document.getElementById('lead-display');
+            leadDisplay = document.getElementById('lead-display'),
+            muteCheckbox = document.getElementById('mute-checkbox');
 
         let currentNum = "", formattedIntl = "", vibrationUnlocked = false;
         const notifSound = new Audio('/notif.wav');
@@ -485,6 +558,11 @@
         const savedMode = localStorage.getItem('autoMode') || 'none';
         autoModeSelect.value = savedMode;
         autoModeSelect.addEventListener('change', (e) => localStorage.setItem('autoMode', e.target.value));
+        
+        // Mute logic
+        const isMuted = localStorage.getItem('isMuted') === 'true';
+        muteCheckbox.checked = isMuted;
+        muteCheckbox.addEventListener('change', (e) => localStorage.setItem('isMuted', e.target.checked));
 
         // Agent Name logic
         const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:") || "Agent";
@@ -543,8 +621,8 @@
                 if (data.phone && data.phone !== "No number yet" && data.phone !== currentNum) {
                     currentNum = data.phone;
 
-                    // Trigger haptic feedback (vibration) and sound if supported
-                    if (vibrationUnlocked) {
+                    // Trigger haptic feedback (vibration) and sound if supported and not muted
+                    if (vibrationUnlocked && !muteCheckbox.checked) {
                         if (navigator.vibrate) navigator.vibrate([200, 200]);
                         notifSound.play().catch(e => console.log("Audio play error:", e));
                     }
