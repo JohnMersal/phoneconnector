@@ -379,6 +379,13 @@
             gap: 12px;
         }
 
+        .footer-controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+        }
+
         /* Mute Switch - iOS Style */
         .mute-wrapper {
             display: flex;
@@ -544,10 +551,16 @@
 
         <!-- Footer -->
         <div class="footer">
-            <label class="mute-wrapper">
-                <input type="checkbox" id="mute-checkbox" class="mute-checkbox">
-                <span class="mute-label">MUTE NOTIFICATIONS</span>
-            </label>
+            <div class="footer-controls">
+                <label class="mute-wrapper">
+                    <input type="checkbox" id="auto-pull-checkbox" class="mute-checkbox">
+                    <span class="mute-label">AUTO PULL</span>
+                </label>
+                <label class="mute-wrapper">
+                    <input type="checkbox" id="mute-checkbox" class="mute-checkbox">
+                    <span class="mute-label">NOTIFICATIONS</span>
+                </label>
+            </div>
             <div id="last-sync" style="opacity: 0.5;">
                 Ready to pull.
             </div>
@@ -566,6 +579,7 @@
             agentInitial = document.getElementById('agent-initial'),
             autoModeSelect = document.getElementById('autoModeSelect'),
             leadDisplay = document.getElementById('lead-display'),
+            autoPullCheckbox = document.getElementById('auto-pull-checkbox'),
             muteCheckbox = document.getElementById('mute-checkbox'),
             lastSync = document.getElementById('last-sync'),
             leadDetails = document.getElementById('lead-details'),
@@ -593,6 +607,29 @@
         const isMuted = localStorage.getItem('isMuted') === 'true';
         muteCheckbox.checked = isMuted;
         muteCheckbox.addEventListener('change', (e) => localStorage.setItem('isMuted', e.target.checked));
+
+        // Auto Pull logic
+        const savedAutoPull = localStorage.getItem('autoPullEnabled');
+        autoPullCheckbox.checked = savedAutoPull !== 'false';
+        autoPullCheckbox.addEventListener('change', () => {
+            localStorage.setItem('autoPullEnabled', autoPullCheckbox.checked);
+
+            if (autoPullCheckbox.checked) {
+                connectSocket();
+                return;
+            }
+
+            if (reconnectTimer) {
+                window.clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+
+            if (bridgeSocket && (bridgeSocket.readyState === WebSocket.OPEN || bridgeSocket.readyState === WebSocket.CONNECTING)) {
+                bridgeSocket.close(1000, 'Auto pull disabled');
+            }
+
+            setSyncMessage('Auto pull disabled. Use Pull New Lead.', true);
+        });
 
         // Agent Name logic
         const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:") || "Agent";
@@ -747,7 +784,7 @@
         }
 
         function scheduleReconnect() {
-            if (reconnectTimer || isPageUnloading) {
+            if (reconnectTimer || isPageUnloading || !autoPullCheckbox.checked) {
                 return;
             }
 
@@ -758,6 +795,10 @@
         }
 
         function connectSocket() {
+            if (!autoPullCheckbox.checked) {
+                return;
+            }
+
             if (bridgeSocket && (bridgeSocket.readyState === WebSocket.OPEN || bridgeSocket.readyState === WebSocket.CONNECTING)) {
                 return;
             }
@@ -772,6 +813,10 @@
             bridgeSocket.addEventListener('message', (event) => {
                 try {
                     const message = JSON.parse(event.data);
+
+                    if (!autoPullCheckbox.checked) {
+                        return;
+                    }
 
                     if (message.type === 'lead-updated') {
                         applyLeadToUi(message.data, {
@@ -799,7 +844,9 @@
             });
 
             bridgeSocket.addEventListener('close', () => {
-                if (isPageUnloading) {
+                bridgeSocket = null;
+
+                if (isPageUnloading || !autoPullCheckbox.checked) {
                     return;
                 }
 
@@ -829,7 +876,11 @@
         waBtn.onclick = openWhatsApp;
         pullBtn.onclick = () => loadLeadFromApi({ showButtonState: true });
 
-        connectSocket();
+        if (autoPullCheckbox.checked) {
+            connectSocket();
+        } else {
+            setSyncMessage('Auto pull disabled. Use Pull New Lead.', true);
+        }
     </script>
 </body>
 
