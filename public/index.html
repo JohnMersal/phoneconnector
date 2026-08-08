@@ -588,6 +588,7 @@
 
         const SOCKET_RECONNECT_DELAY = 3000;
         const SOCKET_HEALTH_CHECK_DELAY = 5000;
+        const RESUME_RECONNECT_THRESHOLD = 1000;
         let currentNum = "",
             currentLeadSignature = "",
             formattedIntl = "",
@@ -595,6 +596,8 @@
             bridgeSocket = null,
             reconnectTimer = null,
             healthCheckTimer = null,
+            lastBackgroundAt = 0,
+            wasBackgrounded = false,
             isPageUnloading = false;
         const notifSound = new Audio('/notif.wav');
         notifSound.volume = 0.5;
@@ -823,14 +826,23 @@
             }
 
             setSyncMessage('Connecting live updates...', true);
-            bridgeSocket = new WebSocket(getSocketUrl());
+            const socket = new WebSocket(getSocketUrl());
+            bridgeSocket = socket;
 
-            bridgeSocket.addEventListener('open', () => {
+            socket.addEventListener('open', () => {
+                if (bridgeSocket !== socket) {
+                    return;
+                }
+
                 setSyncMessage('Live updates connected.', true);
                 silentlySyncLead();
             });
 
-            bridgeSocket.addEventListener('message', (event) => {
+            socket.addEventListener('message', (event) => {
+                if (bridgeSocket !== socket) {
+                    return;
+                }
+
                 try {
                     const message = JSON.parse(event.data);
 
@@ -863,7 +875,11 @@
                 }
             });
 
-            bridgeSocket.addEventListener('close', () => {
+            socket.addEventListener('close', () => {
+                if (bridgeSocket !== socket) {
+                    return;
+                }
+
                 bridgeSocket = null;
 
                 if (isPageUnloading || !autoPullCheckbox.checked) {
@@ -874,7 +890,11 @@
                 scheduleReconnect();
             });
 
-            bridgeSocket.addEventListener('error', (error) => {
+            socket.addEventListener('error', (error) => {
+                if (bridgeSocket !== socket) {
+                    return;
+                }
+
                 console.error('Bridge socket error:', error);
 
                 if (bridgeSocket && bridgeSocket.readyState === WebSocket.OPEN) {
@@ -896,6 +916,52 @@
             if (bridgeSocket.readyState === WebSocket.OPEN) {
                 silentlySyncLead();
             }
+        }
+
+        function markAppBackgrounded() {
+            if (isPageUnloading) {
+                return;
+            }
+
+            wasBackgrounded = true;
+            lastBackgroundAt = Date.now();
+        }
+
+        function refreshLiveSession(reason) {
+            if (!autoPullCheckbox.checked || isPageUnloading) {
+                return;
+            }
+
+            if (reconnectTimer) {
+                window.clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+
+            const socket = bridgeSocket;
+            bridgeSocket = null;
+
+            if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+                socket.close(1000, reason);
+            }
+
+            setSyncMessage('Refreshing live updates...', true);
+            connectSocket();
+        }
+
+        function handleAppResume(trigger) {
+            if (!wasBackgrounded || isPageUnloading) {
+                return;
+            }
+
+            wasBackgrounded = false;
+            const timeAway = Date.now() - lastBackgroundAt;
+
+            if (timeAway >= RESUME_RECONNECT_THRESHOLD) {
+                refreshLiveSession(`App resumed via ${trigger}`);
+                return;
+            }
+
+            ensureLiveSync();
         }
 
         function startHealthCheck() {
@@ -930,12 +996,18 @@
             }
         });
 
-        window.addEventListener('focus', ensureLiveSync);
+        window.addEventListener('focus', () => handleAppResume('focus'));
+        window.addEventListener('blur', markAppBackgrounded);
         window.addEventListener('online', ensureLiveSync);
+        window.addEventListener('pagehide', markAppBackgrounded);
+        window.addEventListener('pageshow', () => handleAppResume('pageshow'));
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) {
-                ensureLiveSync();
+            if (document.hidden) {
+                markAppBackgrounded();
+                return;
             }
+
+            handleAppResume('visibilitychange');
         });
 
         zoomBtn.onclick = triggerZoom;
