@@ -60,30 +60,6 @@
             pointer-events: none;
         }
 
-        .debug-panel {
-            position: fixed;
-            left: 8px;
-            right: 8px;
-            bottom: 8px;
-            z-index: 40;
-            padding: 8px 10px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(7, 11, 20, 0.88);
-            color: rgba(255, 255, 255, 0.82);
-            font-size: 10px;
-            line-height: 1.4;
-            font-family: 'Space Mono', monospace;
-            backdrop-filter: blur(10px);
-            max-height: 22dvh;
-            overflow: auto;
-            white-space: pre-wrap;
-        }
-
-        .debug-panel[hidden] {
-            display: none;
-        }
-
         /* Overlay */
         #overlay {
             position: fixed;
@@ -477,7 +453,6 @@
 <body>
 
     <div class="bridge-version">v2.1</div>
-    <div id="debug-panel" class="debug-panel"></div>
 
     <!-- Start Overlay -->
     <div id="overlay">
@@ -607,25 +582,17 @@
             autoPullCheckbox = document.getElementById('auto-pull-checkbox'),
             muteCheckbox = document.getElementById('mute-checkbox'),
             lastSync = document.getElementById('last-sync'),
-            debugPanel = document.getElementById('debug-panel'),
             leadDetails = document.getElementById('lead-details'),
             leadName = document.getElementById('lead-name'),
             leadLocation = document.getElementById('lead-location');
 
         const SOCKET_RECONNECT_DELAY = 3000;
-        const SOCKET_HEALTH_CHECK_DELAY = 5000;
-        const SOCKET_SUSPEND_GAP_THRESHOLD = 9000;
-        const RESUME_RECONNECT_THRESHOLD = 1000;
         let currentNum = "",
             currentLeadSignature = "",
             formattedIntl = "",
             vibrationUnlocked = false,
             bridgeSocket = null,
             reconnectTimer = null,
-            healthCheckTimer = null,
-            lastHealthCheckAt = Date.now(),
-            lastBackgroundAt = 0,
-            wasBackgrounded = false,
             isPageUnloading = false;
         const notifSound = new Audio('/notif.wav');
         notifSound.volume = 0.5;
@@ -668,65 +635,6 @@
         const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:") || "Agent";
         agentName.innerText = userId;
         agentInitial.innerText = userId.charAt(0).toUpperCase();
-        restoreDebugPanel();
-
-        // #region debug-point A:reporter
-        const DEBUG_SESSION_ID = 'android-resume-socket';
-        const DEBUG_STORAGE_KEY = 'bridgeDebugTrace';
-        const DEBUG_LOG_LIMIT = 12;
-        function reportDebug(hypothesisId, location, msg, data = {}) {
-            const event = {
-                sessionId: DEBUG_SESSION_ID,
-                hypothesisId,
-                location,
-                msg: `[DEBUG] ${msg}`,
-                data,
-                ts: Date.now(),
-            };
-
-            const timestamp = new Date(event.ts).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-            });
-
-            const line = `${timestamp} ${hypothesisId} ${msg} ${JSON.stringify(data)}`;
-            const nextLines = [line];
-
-            try {
-                const previousLines = JSON.parse(sessionStorage.getItem(DEBUG_STORAGE_KEY) || '[]');
-                if (Array.isArray(previousLines)) {
-                    nextLines.push(...previousLines);
-                }
-            } catch {}
-
-            const trimmedLines = nextLines.slice(0, DEBUG_LOG_LIMIT);
-
-            try {
-                sessionStorage.setItem(DEBUG_STORAGE_KEY, JSON.stringify(trimmedLines));
-            } catch {}
-
-            if (debugPanel) {
-                debugPanel.textContent = trimmedLines.join('\n');
-            }
-        }
-
-        function restoreDebugPanel() {
-            if (!debugPanel) {
-                return;
-            }
-
-            try {
-                const storedLines = JSON.parse(sessionStorage.getItem(DEBUG_STORAGE_KEY) || '[]');
-                if (Array.isArray(storedLines) && storedLines.length) {
-                    debugPanel.textContent = storedLines.join('\n');
-                    return;
-                }
-            } catch {}
-
-            debugPanel.textContent = 'Debug trace ready';
-        }
-        // #endregion
 
         function setSyncMessage(message, dimmed = false) {
             lastSync.textContent = message;
@@ -750,13 +658,6 @@
         function triggerZoom(e) {
             if (e) e.preventDefault();
             if (formattedIntl) {
-                // #region debug-point E:trigger-zoom
-                reportDebug('E', 'public/index.html:triggerZoom', 'Launching zoom external app', {
-                    formattedIntl,
-                    autoPullEnabled: autoPullCheckbox.checked,
-                    socketState: bridgeSocket?.readyState ?? null,
-                });
-                // #endregion
                 const zoomFormat = formattedIntl.startsWith('00') ? '+' + formattedIntl.substring(2) : '+' + formattedIntl;
                 window.location.href = "zoomphonecall://" + zoomFormat;
             }
@@ -849,14 +750,7 @@
         }
 
         async function loadLeadFromApi(options = {}) {
-            const {
-                showButtonState = true,
-                source = 'manual',
-                shouldNotify = true,
-                shouldAutoDial = true,
-                emptyStateMessage = 'No newer lead found.',
-                errorMessage = 'Manual pull failed.',
-            } = options;
+            const { showButtonState = true } = options;
             const originalPullText = pullBtn.innerHTML;
 
             if (showButtonState) {
@@ -865,56 +759,28 @@
             }
 
             try {
-                // #region debug-point C:manual-fetch-start
-                reportDebug('C', 'public/index.html:loadLeadFromApi:start', 'Fetching lead via HTTP', {
-                    source,
-                    showButtonState,
-                    autoPullEnabled: autoPullCheckbox.checked,
-                    socketState: bridgeSocket?.readyState ?? null,
-                    currentLeadSignature,
-                });
-                // #endregion
                 const response = await fetch(`/get-number/${userId}`);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
 
                 const data = await response.json();
-                // #region debug-point C:manual-fetch-result
-                reportDebug('C', 'public/index.html:loadLeadFromApi:result', 'Fetched lead via HTTP', {
-                    source,
-                    phone: data?.phone ?? null,
-                    name: data?.name ?? null,
-                    location: data?.location ?? null,
-                    socketState: bridgeSocket?.readyState ?? null,
-                });
-                // #endregion
-                const applied = applyLeadToUi(data, { source, shouldNotify, shouldAutoDial });
+                const applied = applyLeadToUi(data, { source: 'manual', shouldNotify: true, shouldAutoDial: true });
 
                 if (!applied && showButtonState) {
                     pullBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg> All up to date`;
-                    setSyncMessage(emptyStateMessage, true);
+                    setSyncMessage('No newer lead found.', true);
                     await new Promise(r => setTimeout(r, 1000));
                 }
             } catch (error) {
                 console.error(error);
-                setSyncMessage(errorMessage, false);
+                setSyncMessage('Manual pull failed.', false);
             } finally {
                 if (showButtonState) {
                     pullBtn.innerHTML = originalPullText;
                     pullBtn.disabled = false;
                 }
             }
-        }
-
-        function silentlySyncLead() {
-            return loadLeadFromApi({
-                showButtonState: false,
-                source: 'snapshot',
-                shouldNotify: false,
-                shouldAutoDial: false,
-                errorMessage: 'Background sync failed.',
-            });
         }
 
         function scheduleReconnect() {
@@ -940,45 +806,14 @@
             setSyncMessage('Connecting live updates...', true);
             const socket = new WebSocket(getSocketUrl());
             bridgeSocket = socket;
-            // #region debug-point B:socket-create
-            reportDebug('B', 'public/index.html:connectSocket:create', 'Creating websocket', {
-                url: getSocketUrl(),
-                readyState: socket.readyState,
-                autoPullEnabled: autoPullCheckbox.checked,
-            });
-            // #endregion
 
             socket.addEventListener('open', () => {
-                if (bridgeSocket !== socket) {
-                    return;
-                }
-
-                // #region debug-point B:socket-open
-                reportDebug('B', 'public/index.html:connectSocket:open', 'Websocket opened', {
-                    readyState: socket.readyState,
-                    wasBackgrounded,
-                    lastBackgroundAt,
-                });
-                // #endregion
                 setSyncMessage('Live updates connected.', true);
-                silentlySyncLead();
             });
 
             socket.addEventListener('message', (event) => {
-                if (bridgeSocket !== socket) {
-                    return;
-                }
-
                 try {
                     const message = JSON.parse(event.data);
-                    // #region debug-point B:socket-message
-                    reportDebug('B', 'public/index.html:connectSocket:message', 'Websocket message received', {
-                        type: message?.type ?? null,
-                        phone: message?.data?.phone ?? null,
-                        autoPullEnabled: autoPullCheckbox.checked,
-                        readyState: socket.readyState,
-                    });
-                    // #endregion
 
                     if (!autoPullCheckbox.checked) {
                         return;
@@ -1010,17 +845,6 @@
             });
 
             socket.addEventListener('close', () => {
-                if (bridgeSocket !== socket) {
-                    return;
-                }
-
-                // #region debug-point B:socket-close
-                reportDebug('B', 'public/index.html:connectSocket:close', 'Websocket closed', {
-                    readyState: socket.readyState,
-                    wasBackgrounded,
-                    lastBackgroundAt,
-                });
-                // #endregion
                 bridgeSocket = null;
 
                 if (isPageUnloading || !autoPullCheckbox.checked) {
@@ -1032,151 +856,8 @@
             });
 
             socket.addEventListener('error', (error) => {
-                if (bridgeSocket !== socket) {
-                    return;
-                }
-
-                // #region debug-point B:socket-error
-                reportDebug('B', 'public/index.html:connectSocket:error', 'Websocket error', {
-                    readyState: socket.readyState,
-                    message: error?.message ?? null,
-                });
-                // #endregion
-
-                if (bridgeSocket && bridgeSocket.readyState === WebSocket.OPEN) {
-                    bridgeSocket.close(1011, 'Socket error');
-                }
+                console.error('Bridge socket error:', error);
             });
-        }
-
-        function ensureLiveSync() {
-            if (!autoPullCheckbox.checked || isPageUnloading) {
-                return;
-            }
-
-            // #region debug-point D:ensure-live-sync
-            reportDebug('D', 'public/index.html:ensureLiveSync', 'Ensuring live sync', {
-                hasSocket: Boolean(bridgeSocket),
-                socketState: bridgeSocket?.readyState ?? null,
-                wasBackgrounded,
-                documentHidden: document.hidden,
-            });
-            // #endregion
-            if (!bridgeSocket || bridgeSocket.readyState === WebSocket.CLOSED) {
-                connectSocket();
-                return;
-            }
-
-            if (bridgeSocket.readyState === WebSocket.OPEN) {
-                silentlySyncLead();
-            }
-        }
-
-        function markAppBackgrounded() {
-            if (isPageUnloading) {
-                return;
-            }
-
-            wasBackgrounded = true;
-            lastBackgroundAt = Date.now();
-            // #region debug-point D:backgrounded
-            reportDebug('D', 'public/index.html:markAppBackgrounded', 'App marked backgrounded', {
-                lastBackgroundAt,
-                socketState: bridgeSocket?.readyState ?? null,
-                visibilityState: document.visibilityState,
-            });
-            // #endregion
-        }
-
-        function refreshLiveSession(reason) {
-            if (!autoPullCheckbox.checked || isPageUnloading) {
-                return;
-            }
-
-            if (reconnectTimer) {
-                window.clearTimeout(reconnectTimer);
-                reconnectTimer = null;
-            }
-
-            const socket = bridgeSocket;
-            bridgeSocket = null;
-            // #region debug-point D:refresh-live-session
-            reportDebug('D', 'public/index.html:refreshLiveSession', 'Refreshing live session', {
-                reason,
-                previousSocketState: socket?.readyState ?? null,
-                wasBackgrounded,
-                lastBackgroundAt,
-            });
-            // #endregion
-
-            if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-                socket.close(1000, reason);
-            }
-
-            setSyncMessage('Refreshing live updates...', true);
-            connectSocket();
-        }
-
-        function handleAppResume(trigger) {
-            if (!wasBackgrounded || isPageUnloading) {
-                return;
-            }
-
-            wasBackgrounded = false;
-            const timeAway = Date.now() - lastBackgroundAt;
-            // #region debug-point D:handle-resume
-            reportDebug('D', 'public/index.html:handleAppResume', 'Handling app resume', {
-                trigger,
-                timeAway,
-                lastBackgroundAt,
-                socketState: bridgeSocket?.readyState ?? null,
-            });
-            // #endregion
-
-            if (timeAway >= RESUME_RECONNECT_THRESHOLD) {
-                refreshLiveSession(`App resumed via ${trigger}`);
-                return;
-            }
-
-            ensureLiveSync();
-        }
-
-        function startHealthCheck() {
-            if (healthCheckTimer) {
-                return;
-            }
-
-            lastHealthCheckAt = Date.now();
-            healthCheckTimer = window.setInterval(() => {
-                const now = Date.now();
-                const elapsed = now - lastHealthCheckAt;
-                lastHealthCheckAt = now;
-
-                if (!autoPullCheckbox.checked || isPageUnloading) {
-                    return;
-                }
-
-                if (elapsed >= SOCKET_SUSPEND_GAP_THRESHOLD) {
-                    // #region debug-point D:health-gap-refresh
-                    reportDebug('D', 'public/index.html:startHealthCheck', 'Detected suspended timer gap', {
-                        elapsed,
-                        socketState: bridgeSocket?.readyState ?? null,
-                        wasBackgrounded,
-                        documentHidden: document.hidden,
-                    });
-                    // #endregion
-                    refreshLiveSession(`Health check gap ${elapsed}ms`);
-                    return;
-                }
-
-                if (document.hidden) {
-                    return;
-                }
-
-                if (!bridgeSocket || bridgeSocket.readyState === WebSocket.CLOSED) {
-                    connectSocket();
-                }
-            }, SOCKET_HEALTH_CHECK_DELAY);
         }
 
         window.addEventListener('beforeunload', () => {
@@ -1186,45 +867,15 @@
                 window.clearTimeout(reconnectTimer);
             }
 
-            if (healthCheckTimer) {
-                window.clearInterval(healthCheckTimer);
-            }
-
             if (bridgeSocket && (bridgeSocket.readyState === WebSocket.OPEN || bridgeSocket.readyState === WebSocket.CONNECTING)) {
                 bridgeSocket.close(1000, 'Page unloading');
             }
         });
 
-        window.addEventListener('focus', () => handleAppResume('focus'));
-        window.addEventListener('blur', markAppBackgrounded);
-        window.addEventListener('online', ensureLiveSync);
-        window.addEventListener('pagehide', markAppBackgrounded);
-        window.addEventListener('pageshow', () => handleAppResume('pageshow'));
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                markAppBackgrounded();
-                return;
-            }
-
-            handleAppResume('visibilitychange');
-        });
-
         zoomBtn.onclick = triggerZoom;
         copyBtn.onclick = copyToClipboard;
         waBtn.onclick = openWhatsApp;
-        // #region debug-point E:dial-click
-        dialBtn.addEventListener('click', () => {
-            reportDebug('E', 'public/index.html:dialBtn:click', 'Launching phone external app', {
-                dialHref: dialBtn.href,
-                displayedNumber: dialBtn.innerText,
-                autoPullEnabled: autoPullCheckbox.checked,
-                socketState: bridgeSocket?.readyState ?? null,
-            });
-        });
-        // #endregion
         pullBtn.onclick = () => loadLeadFromApi({ showButtonState: true });
-
-        startHealthCheck();
 
         if (autoPullCheckbox.checked) {
             connectSocket();
