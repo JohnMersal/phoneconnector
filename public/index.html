@@ -60,6 +60,30 @@
             pointer-events: none;
         }
 
+        .debug-panel {
+            position: fixed;
+            left: 8px;
+            right: 8px;
+            bottom: 8px;
+            z-index: 40;
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(7, 11, 20, 0.88);
+            color: rgba(255, 255, 255, 0.82);
+            font-size: 10px;
+            line-height: 1.4;
+            font-family: 'Space Mono', monospace;
+            backdrop-filter: blur(10px);
+            max-height: 22dvh;
+            overflow: auto;
+            white-space: pre-wrap;
+        }
+
+        .debug-panel[hidden] {
+            display: none;
+        }
+
         /* Overlay */
         #overlay {
             position: fixed;
@@ -452,7 +476,8 @@
 
 <body>
 
-    <div class="bridge-version">v2.0</div>
+    <div class="bridge-version">v2.1</div>
+    <div id="debug-panel" class="debug-panel"></div>
 
     <!-- Start Overlay -->
     <div id="overlay">
@@ -582,6 +607,7 @@
             autoPullCheckbox = document.getElementById('auto-pull-checkbox'),
             muteCheckbox = document.getElementById('mute-checkbox'),
             lastSync = document.getElementById('last-sync'),
+            debugPanel = document.getElementById('debug-panel'),
             leadDetails = document.getElementById('lead-details'),
             leadName = document.getElementById('lead-name'),
             leadLocation = document.getElementById('lead-location');
@@ -640,6 +666,65 @@
         const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:") || "Agent";
         agentName.innerText = userId;
         agentInitial.innerText = userId.charAt(0).toUpperCase();
+        restoreDebugPanel();
+
+        // #region debug-point A:reporter
+        const DEBUG_SESSION_ID = 'android-resume-socket';
+        const DEBUG_STORAGE_KEY = 'bridgeDebugTrace';
+        const DEBUG_LOG_LIMIT = 12;
+        function reportDebug(hypothesisId, location, msg, data = {}) {
+            const event = {
+                sessionId: DEBUG_SESSION_ID,
+                hypothesisId,
+                location,
+                msg: `[DEBUG] ${msg}`,
+                data,
+                ts: Date.now(),
+            };
+
+            const timestamp = new Date(event.ts).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+            });
+
+            const line = `${timestamp} ${hypothesisId} ${msg} ${JSON.stringify(data)}`;
+            const nextLines = [line];
+
+            try {
+                const previousLines = JSON.parse(sessionStorage.getItem(DEBUG_STORAGE_KEY) || '[]');
+                if (Array.isArray(previousLines)) {
+                    nextLines.push(...previousLines);
+                }
+            } catch {}
+
+            const trimmedLines = nextLines.slice(0, DEBUG_LOG_LIMIT);
+
+            try {
+                sessionStorage.setItem(DEBUG_STORAGE_KEY, JSON.stringify(trimmedLines));
+            } catch {}
+
+            if (debugPanel) {
+                debugPanel.textContent = trimmedLines.join('\n');
+            }
+        }
+
+        function restoreDebugPanel() {
+            if (!debugPanel) {
+                return;
+            }
+
+            try {
+                const storedLines = JSON.parse(sessionStorage.getItem(DEBUG_STORAGE_KEY) || '[]');
+                if (Array.isArray(storedLines) && storedLines.length) {
+                    debugPanel.textContent = storedLines.join('\n');
+                    return;
+                }
+            } catch {}
+
+            debugPanel.textContent = 'Debug trace ready';
+        }
+        // #endregion
 
         function setSyncMessage(message, dimmed = false) {
             lastSync.textContent = message;
@@ -663,6 +748,13 @@
         function triggerZoom(e) {
             if (e) e.preventDefault();
             if (formattedIntl) {
+                // #region debug-point E:trigger-zoom
+                reportDebug('E', 'public/index.html:triggerZoom', 'Launching zoom external app', {
+                    formattedIntl,
+                    autoPullEnabled: autoPullCheckbox.checked,
+                    socketState: bridgeSocket?.readyState ?? null,
+                });
+                // #endregion
                 const zoomFormat = formattedIntl.startsWith('00') ? '+' + formattedIntl.substring(2) : '+' + formattedIntl;
                 window.location.href = "zoomphonecall://" + zoomFormat;
             }
@@ -771,12 +863,30 @@
             }
 
             try {
+                // #region debug-point C:manual-fetch-start
+                reportDebug('C', 'public/index.html:loadLeadFromApi:start', 'Fetching lead via HTTP', {
+                    source,
+                    showButtonState,
+                    autoPullEnabled: autoPullCheckbox.checked,
+                    socketState: bridgeSocket?.readyState ?? null,
+                    currentLeadSignature,
+                });
+                // #endregion
                 const response = await fetch(`/get-number/${userId}`);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
 
                 const data = await response.json();
+                // #region debug-point C:manual-fetch-result
+                reportDebug('C', 'public/index.html:loadLeadFromApi:result', 'Fetched lead via HTTP', {
+                    source,
+                    phone: data?.phone ?? null,
+                    name: data?.name ?? null,
+                    location: data?.location ?? null,
+                    socketState: bridgeSocket?.readyState ?? null,
+                });
+                // #endregion
                 const applied = applyLeadToUi(data, { source, shouldNotify, shouldAutoDial });
 
                 if (!applied && showButtonState) {
@@ -828,12 +938,26 @@
             setSyncMessage('Connecting live updates...', true);
             const socket = new WebSocket(getSocketUrl());
             bridgeSocket = socket;
+            // #region debug-point B:socket-create
+            reportDebug('B', 'public/index.html:connectSocket:create', 'Creating websocket', {
+                url: getSocketUrl(),
+                readyState: socket.readyState,
+                autoPullEnabled: autoPullCheckbox.checked,
+            });
+            // #endregion
 
             socket.addEventListener('open', () => {
                 if (bridgeSocket !== socket) {
                     return;
                 }
 
+                // #region debug-point B:socket-open
+                reportDebug('B', 'public/index.html:connectSocket:open', 'Websocket opened', {
+                    readyState: socket.readyState,
+                    wasBackgrounded,
+                    lastBackgroundAt,
+                });
+                // #endregion
                 setSyncMessage('Live updates connected.', true);
                 silentlySyncLead();
             });
@@ -845,6 +969,14 @@
 
                 try {
                     const message = JSON.parse(event.data);
+                    // #region debug-point B:socket-message
+                    reportDebug('B', 'public/index.html:connectSocket:message', 'Websocket message received', {
+                        type: message?.type ?? null,
+                        phone: message?.data?.phone ?? null,
+                        autoPullEnabled: autoPullCheckbox.checked,
+                        readyState: socket.readyState,
+                    });
+                    // #endregion
 
                     if (!autoPullCheckbox.checked) {
                         return;
@@ -880,6 +1012,13 @@
                     return;
                 }
 
+                // #region debug-point B:socket-close
+                reportDebug('B', 'public/index.html:connectSocket:close', 'Websocket closed', {
+                    readyState: socket.readyState,
+                    wasBackgrounded,
+                    lastBackgroundAt,
+                });
+                // #endregion
                 bridgeSocket = null;
 
                 if (isPageUnloading || !autoPullCheckbox.checked) {
@@ -895,7 +1034,12 @@
                     return;
                 }
 
-                console.error('Bridge socket error:', error);
+                // #region debug-point B:socket-error
+                reportDebug('B', 'public/index.html:connectSocket:error', 'Websocket error', {
+                    readyState: socket.readyState,
+                    message: error?.message ?? null,
+                });
+                // #endregion
 
                 if (bridgeSocket && bridgeSocket.readyState === WebSocket.OPEN) {
                     bridgeSocket.close(1011, 'Socket error');
@@ -908,6 +1052,14 @@
                 return;
             }
 
+            // #region debug-point D:ensure-live-sync
+            reportDebug('D', 'public/index.html:ensureLiveSync', 'Ensuring live sync', {
+                hasSocket: Boolean(bridgeSocket),
+                socketState: bridgeSocket?.readyState ?? null,
+                wasBackgrounded,
+                documentHidden: document.hidden,
+            });
+            // #endregion
             if (!bridgeSocket || bridgeSocket.readyState === WebSocket.CLOSED) {
                 connectSocket();
                 return;
@@ -925,6 +1077,13 @@
 
             wasBackgrounded = true;
             lastBackgroundAt = Date.now();
+            // #region debug-point D:backgrounded
+            reportDebug('D', 'public/index.html:markAppBackgrounded', 'App marked backgrounded', {
+                lastBackgroundAt,
+                socketState: bridgeSocket?.readyState ?? null,
+                visibilityState: document.visibilityState,
+            });
+            // #endregion
         }
 
         function refreshLiveSession(reason) {
@@ -939,6 +1098,14 @@
 
             const socket = bridgeSocket;
             bridgeSocket = null;
+            // #region debug-point D:refresh-live-session
+            reportDebug('D', 'public/index.html:refreshLiveSession', 'Refreshing live session', {
+                reason,
+                previousSocketState: socket?.readyState ?? null,
+                wasBackgrounded,
+                lastBackgroundAt,
+            });
+            // #endregion
 
             if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
                 socket.close(1000, reason);
@@ -955,6 +1122,14 @@
 
             wasBackgrounded = false;
             const timeAway = Date.now() - lastBackgroundAt;
+            // #region debug-point D:handle-resume
+            reportDebug('D', 'public/index.html:handleAppResume', 'Handling app resume', {
+                trigger,
+                timeAway,
+                lastBackgroundAt,
+                socketState: bridgeSocket?.readyState ?? null,
+            });
+            // #endregion
 
             if (timeAway >= RESUME_RECONNECT_THRESHOLD) {
                 refreshLiveSession(`App resumed via ${trigger}`);
@@ -1013,6 +1188,16 @@
         zoomBtn.onclick = triggerZoom;
         copyBtn.onclick = copyToClipboard;
         waBtn.onclick = openWhatsApp;
+        // #region debug-point E:dial-click
+        dialBtn.addEventListener('click', () => {
+            reportDebug('E', 'public/index.html:dialBtn:click', 'Launching phone external app', {
+                dialHref: dialBtn.href,
+                displayedNumber: dialBtn.innerText,
+                autoPullEnabled: autoPullCheckbox.checked,
+                socketState: bridgeSocket?.readyState ?? null,
+            });
+        });
+        // #endregion
         pullBtn.onclick = () => loadLeadFromApi({ showButtonState: true });
 
         startHealthCheck();
