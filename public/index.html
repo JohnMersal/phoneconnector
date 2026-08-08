@@ -48,6 +48,18 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        .bridge-version {
+            position: fixed;
+            top: 8px;
+            right: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.45);
+            text-transform: uppercase;
+            pointer-events: none;
+        }
+
         /* Overlay */
         #overlay {
             position: fixed;
@@ -433,6 +445,8 @@
 
 <body>
 
+    <div class="bridge-version">v2.0</div>
+
     <!-- Start Overlay -->
     <div id="overlay">
         TAP TO START <br> AGENT SESSION
@@ -552,9 +566,20 @@
             agentInitial = document.getElementById('agent-initial'),
             autoModeSelect = document.getElementById('autoModeSelect'),
             leadDisplay = document.getElementById('lead-display'),
-            muteCheckbox = document.getElementById('mute-checkbox');
+            muteCheckbox = document.getElementById('mute-checkbox'),
+            lastSync = document.getElementById('last-sync'),
+            leadDetails = document.getElementById('lead-details'),
+            leadName = document.getElementById('lead-name'),
+            leadLocation = document.getElementById('lead-location');
 
-        let currentNum = "", formattedIntl = "", vibrationUnlocked = false;
+        const SOCKET_RECONNECT_DELAY = 3000;
+        let currentNum = "",
+            currentLeadSignature = "",
+            formattedIntl = "",
+            vibrationUnlocked = false,
+            bridgeSocket = null,
+            reconnectTimer = null,
+            isPageUnloading = false;
         const notifSound = new Audio('/notif.wav');
         notifSound.volume = 0.5;
         notifSound.playbackRate = 2.0;
@@ -573,6 +598,11 @@
         const userId = window.location.pathname.split('/').filter(p => p)[0] || prompt("Enter Agent Name:") || "Agent";
         agentName.innerText = userId;
         agentInitial.innerText = userId.charAt(0).toUpperCase();
+
+        function setSyncMessage(message, dimmed = false) {
+            lastSync.textContent = message;
+            lastSync.style.opacity = dimmed ? '0.5' : '0.85';
+        }
 
         overlay.addEventListener('pointerdown', (e) => {
             e.preventDefault();
@@ -614,68 +644,192 @@
             }
         }
 
-        async function fetchLead() {
-            pullBtn.disabled = true;
+        function getLeadSignature(data) {
+            return [data?.phone ?? '', data?.name ?? '', data?.location ?? ''].join('|');
+        }
+
+        function getSocketUrl() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            return `${wsProtocol}//${window.location.host}/ws?userId=${encodeURIComponent(userId)}`;
+        }
+
+        function applyLeadToUi(data, options = {}) {
+            const {
+                source = 'manual',
+                shouldNotify = true,
+                shouldAutoDial = true,
+            } = options;
+
+            if (!data?.phone || data.phone === 'No number yet') {
+                return false;
+            }
+
+            const nextSignature = getLeadSignature(data);
+            if (nextSignature === currentLeadSignature) {
+                return false;
+            }
+
+            currentLeadSignature = nextSignature;
+            currentNum = data.phone;
+
+            if (shouldNotify) {
+                if (vibrationUnlocked && !muteCheckbox.checked) {
+                    if (navigator.vibrate) navigator.vibrate([200, 200]);
+                    notifSound.play().catch(e => console.log("Audio play error:", e));
+                }
+
+                leadDisplay.classList.remove('flash-animation');
+                void leadDisplay.offsetWidth;
+                leadDisplay.classList.add('flash-animation');
+            }
+
+            formattedIntl = data.phone.startsWith('00') ? data.phone : '002' + data.phone.replace(/\D/g, '');
+            dialBtn.innerText = data.phone;
+            dialBtn.href = "tel:" + data.phone;
+            copyText.innerText = `Copy (${data.phone})`;
+
+            zoomBtn.style.display = 'flex';
+            copyBtn.style.display = 'flex';
+            waBtn.style.display = 'flex';
+
+            if (data.name || data.location) {
+                leadDetails.style.display = 'flex';
+                leadName.innerText = data.name || '';
+                leadLocation.innerText = data.location || '';
+            } else {
+                leadDetails.style.display = 'none';
+            }
+
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const messagePrefix = source === 'live' ? 'Live update' : source === 'snapshot' ? 'Synced' : 'Pulled';
+            setSyncMessage(`${messagePrefix}: ${timestamp}`);
+
+            if (shouldAutoDial) {
+                if (localStorage.getItem('autoMode') === 'zoom') triggerZoom();
+                else if (localStorage.getItem('autoMode') === 'phone') window.location.href = "tel:" + data.phone;
+            }
+
+            return true;
+        }
+
+        async function loadLeadFromApi(options = {}) {
+            const { showButtonState = true } = options;
             const originalPullText = pullBtn.innerHTML;
-            pullBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> Pulling...`;
+
+            if (showButtonState) {
+                pullBtn.disabled = true;
+                pullBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> Pulling...`;
+            }
 
             try {
                 const response = await fetch(`/get-number/${userId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
                 const data = await response.json();
+                const applied = applyLeadToUi(data, { source: 'manual', shouldNotify: true, shouldAutoDial: true });
 
-                if (data.phone && data.phone !== "No number yet" && data.phone !== currentNum) {
-                    currentNum = data.phone;
-
-                    // Trigger haptic feedback (vibration) and sound if supported and not muted
-                    if (vibrationUnlocked && !muteCheckbox.checked) {
-                        if (navigator.vibrate) navigator.vibrate([200, 200]);
-                        notifSound.play().catch(e => console.log("Audio play error:", e));
-                    }
-
-                    // Trigger visual flash animation
-                    leadDisplay.classList.remove('flash-animation');
-                    void leadDisplay.offsetWidth; // trigger reflow
-                    leadDisplay.classList.add('flash-animation');
-
-                    // Unified Formatting Logic
-                    formattedIntl = data.phone.startsWith('00') ? data.phone : '002' + data.phone.replace(/\D/g, '');
-
-                    dialBtn.innerText = data.phone;
-                    dialBtn.href = "tel:" + data.phone;
-                    copyText.innerText = `Copy (${data.phone})`;
-
-                    zoomBtn.style.display = 'flex';
-                    copyBtn.style.display = 'flex';
-                    waBtn.style.display = 'flex';
-
-                    // Update Name and Location if provided
-                    if (data.name || data.location) {
-                        document.getElementById('lead-details').style.display = 'flex';
-                        document.getElementById('lead-name').innerText = data.name || '';
-                        document.getElementById('lead-location').innerText = data.location || '';
-                    } else {
-                        document.getElementById('lead-details').style.display = 'none';
-                    }
-
-                    if (localStorage.getItem('autoMode') === 'zoom') triggerZoom();
-                    else if (localStorage.getItem('autoMode') === 'phone') window.location.href = "tel:" + data.phone;
-                } else {
-                    // Feedback for no new leads
+                if (!applied && showButtonState) {
                     pullBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg> All up to date`;
+                    setSyncMessage('No newer lead found.', true);
                     await new Promise(r => setTimeout(r, 1000));
                 }
-            } catch (e) {
-                console.error(e);
+            } catch (error) {
+                console.error(error);
+                setSyncMessage('Manual pull failed.', false);
             } finally {
-                pullBtn.innerHTML = originalPullText;
-                pullBtn.disabled = false;
+                if (showButtonState) {
+                    pullBtn.innerHTML = originalPullText;
+                    pullBtn.disabled = false;
+                }
             }
         }
+
+        function scheduleReconnect() {
+            if (reconnectTimer || isPageUnloading) {
+                return;
+            }
+
+            reconnectTimer = window.setTimeout(() => {
+                reconnectTimer = null;
+                connectSocket();
+            }, SOCKET_RECONNECT_DELAY);
+        }
+
+        function connectSocket() {
+            if (bridgeSocket && (bridgeSocket.readyState === WebSocket.OPEN || bridgeSocket.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+
+            setSyncMessage('Connecting live updates...', true);
+            bridgeSocket = new WebSocket(getSocketUrl());
+
+            bridgeSocket.addEventListener('open', () => {
+                setSyncMessage('Live updates connected.', true);
+            });
+
+            bridgeSocket.addEventListener('message', (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+
+                    if (message.type === 'lead-updated') {
+                        applyLeadToUi(message.data, {
+                            source: 'live',
+                            shouldNotify: true,
+                            shouldAutoDial: true,
+                        });
+                        return;
+                    }
+
+                    if (message.type === 'lead-snapshot') {
+                        const applied = applyLeadToUi(message.data, {
+                            source: 'snapshot',
+                            shouldNotify: false,
+                            shouldAutoDial: false,
+                        });
+
+                        if (!applied) {
+                            setSyncMessage('Live updates connected.', true);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to parse live update:', error);
+                }
+            });
+
+            bridgeSocket.addEventListener('close', () => {
+                if (isPageUnloading) {
+                    return;
+                }
+
+                setSyncMessage('Live updates reconnecting...', true);
+                scheduleReconnect();
+            });
+
+            bridgeSocket.addEventListener('error', (error) => {
+                console.error('Bridge socket error:', error);
+            });
+        }
+
+        window.addEventListener('beforeunload', () => {
+            isPageUnloading = true;
+
+            if (reconnectTimer) {
+                window.clearTimeout(reconnectTimer);
+            }
+
+            if (bridgeSocket && (bridgeSocket.readyState === WebSocket.OPEN || bridgeSocket.readyState === WebSocket.CONNECTING)) {
+                bridgeSocket.close(1000, 'Page unloading');
+            }
+        });
 
         zoomBtn.onclick = triggerZoom;
         copyBtn.onclick = copyToClipboard;
         waBtn.onclick = openWhatsApp;
-        pullBtn.onclick = fetchLead;
+        pullBtn.onclick = () => loadLeadFromApi({ showButtonState: true });
+
+        connectSocket();
     </script>
 </body>
 

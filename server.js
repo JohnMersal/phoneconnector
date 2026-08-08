@@ -1,7 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
 const path = require('path');
+const { WebSocket, WebSocketServer } = require('ws');
+
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: '/ws' });
 
 // Standard Middleware
 app.use(cors());
@@ -11,24 +16,134 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // In-memory store for phone numbers
-let userStore = {};
+const userStore = {};
+const liveClients = new Map();
+
+function normalizeUserId(userId) {
+    return String(userId || '').trim().toLowerCase();
+}
+
+/**
+ * Broadcast a lead payload to all connected bridge clients for a user.
+ */
+function broadcastToUser(userId, type, data) {
+    const clients = liveClients.get(userId);
+    if (!clients?.size) {
+        return;
+    }
+
+    const payload = JSON.stringify({
+        type,
+        userId,
+        data,
+        sentAt: new Date().toISOString(),
+    });
+
+    for (const client of clients) {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(payload);
+        }
+    }
+}
+
+/**
+ * Track an open WebSocket under its agent id so CRM pushes can target it.
+ */
+function registerClient(userId, client) {
+    const existingClients = liveClients.get(userId) ?? new Set();
+    existingClients.add(client);
+    liveClients.set(userId, existingClients);
+}
+
+function unregisterClient(userId, client) {
+    const existingClients = liveClients.get(userId);
+    if (!existingClients) {
+        return;
+    }
+
+    existingClients.delete(client);
+    if (!existingClients.size) {
+        liveClients.delete(userId);
+    }
+}
+
+wss.on('connection', (client, request) => {
+    const requestUrl = new URL(request.url, `http://${request.headers.host}`);
+    const userId = normalizeUserId(requestUrl.searchParams.get('userId'));
+
+    if (!userId) {
+        client.close(1008, 'Missing userId');
+        return;
+    }
+
+    client.isAlive = true;
+    client.on('pong', () => {
+        client.isAlive = true;
+    });
+
+    registerClient(userId, client);
+    console.log(`[${new Date().toISOString()}] [WS] Connected ${userId}`);
+
+    client.send(JSON.stringify({
+        type: 'connection-ready',
+        userId,
+        sentAt: new Date().toISOString(),
+    }));
+
+    const storedLead = userStore[userId];
+    if (storedLead?.phone) {
+        client.send(JSON.stringify({
+            type: 'lead-snapshot',
+            userId,
+            data: storedLead,
+            sentAt: new Date().toISOString(),
+        }));
+    }
+
+    client.on('close', () => {
+        unregisterClient(userId, client);
+        console.log(`[${new Date().toISOString()}] [WS] Disconnected ${userId}`);
+    });
+
+    client.on('error', (error) => {
+        console.error(`[${new Date().toISOString()}] [WS] Error for ${userId}:`, error);
+    });
+});
+
+const heartbeatInterval = setInterval(() => {
+    for (const client of wss.clients) {
+        if (!client.isAlive) {
+            client.terminate();
+            continue;
+        }
+
+        client.isAlive = false;
+        client.ping();
+    }
+}, 30000);
 
 /* ==========================================
    1. CRM API ENDPOINT
    ========================================== */
 app.post('/set-number/:userId', (req, res) => {
-    const { userId } = req.params;
+    const userId = normalizeUserId(req.params.userId);
     const { phone, name, location } = req.body;
     
     if (phone && userId) {
-        const normalizedId = userId.toLowerCase();
-        userStore[normalizedId] = { phone, name, location };
-        
-        // Log the successful update with timestamp
         const timestamp = new Date().toISOString();
-        console.log(`[${timestamp}] [CRM] Updated ${normalizedId}: ${phone} (${name || 'No Name'})`);
-        
-        return res.json({ success: true, agent: normalizedId, number: phone, name, location });
+        const leadPayload = {
+            phone,
+            name: name ?? '',
+            location: location ?? '',
+            updatedAt: timestamp,
+        };
+
+        userStore[userId] = leadPayload;
+
+        console.log(`[${timestamp}] [CRM] Updated ${userId}: ${phone} (${name || 'No Name'})`);
+        broadcastToUser(userId, 'lead-updated', leadPayload);
+
+        return res.json({ success: true, agent: userId, number: phone, name, location, updatedAt: timestamp });
     }
     
     console.warn(`[${new Date().toISOString()}] [CRM] Failed update attempt: Missing data`);
@@ -39,7 +154,7 @@ app.post('/set-number/:userId', (req, res) => {
    2. MOBILE APP API ENDPOINT
    ========================================== */
 app.get('/get-number/:userId', (req, res) => {
-    const userId = req.params.userId.toLowerCase();
+    const userId = normalizeUserId(req.params.userId);
     const data = userStore[userId] || { phone: "No number yet" };
     
     res.json(data);
@@ -48,13 +163,13 @@ app.get('/get-number/:userId', (req, res) => {
 /* ==========================================
    3. THE MAGIC WILDCARD ROUTE
    ========================================== */
-app.get('/:agentName', (req, res) => {
+app.get('/:agentName', (_req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Start Server
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`-------------------------------------------`);
     console.log(`CRM Bridge Server running on port ${PORT}`);
     console.log(`Admin Link: http://localhost:${PORT}/john`);
@@ -66,10 +181,21 @@ const server = app.listen(PORT, '0.0.0.0', () => {
    This helps the server handle termination 
    signals properly in Docker/EasyPanel.
    ========================================== */
-process.on('SIGTERM', () => {
-    console.log('SIGTERM signal received: closing HTTP server...');
-    server.close(() => {
-        console.log('HTTP server closed.');
-        process.exit(0);
+function shutdown(signal) {
+    console.log(`${signal} signal received: closing bridge server...`);
+    clearInterval(heartbeatInterval);
+
+    for (const client of wss.clients) {
+        client.close(1001, 'Server shutting down');
+    }
+
+    wss.close(() => {
+        server.close(() => {
+            console.log('HTTP server closed.');
+            process.exit(0);
+        });
     });
-});
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
