@@ -587,12 +587,14 @@
             leadLocation = document.getElementById('lead-location');
 
         const SOCKET_RECONNECT_DELAY = 3000;
+        const SOCKET_HEALTH_CHECK_DELAY = 5000;
         let currentNum = "",
             currentLeadSignature = "",
             formattedIntl = "",
             vibrationUnlocked = false,
             bridgeSocket = null,
             reconnectTimer = null,
+            healthCheckTimer = null,
             isPageUnloading = false;
         const notifSound = new Audio('/notif.wav');
         notifSound.volume = 0.5;
@@ -750,7 +752,14 @@
         }
 
         async function loadLeadFromApi(options = {}) {
-            const { showButtonState = true } = options;
+            const {
+                showButtonState = true,
+                source = 'manual',
+                shouldNotify = true,
+                shouldAutoDial = true,
+                emptyStateMessage = 'No newer lead found.',
+                errorMessage = 'Manual pull failed.',
+            } = options;
             const originalPullText = pullBtn.innerHTML;
 
             if (showButtonState) {
@@ -765,22 +774,32 @@
                 }
 
                 const data = await response.json();
-                const applied = applyLeadToUi(data, { source: 'manual', shouldNotify: true, shouldAutoDial: true });
+                const applied = applyLeadToUi(data, { source, shouldNotify, shouldAutoDial });
 
                 if (!applied && showButtonState) {
                     pullBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg> All up to date`;
-                    setSyncMessage('No newer lead found.', true);
+                    setSyncMessage(emptyStateMessage, true);
                     await new Promise(r => setTimeout(r, 1000));
                 }
             } catch (error) {
                 console.error(error);
-                setSyncMessage('Manual pull failed.', false);
+                setSyncMessage(errorMessage, false);
             } finally {
                 if (showButtonState) {
                     pullBtn.innerHTML = originalPullText;
                     pullBtn.disabled = false;
                 }
             }
+        }
+
+        function silentlySyncLead() {
+            return loadLeadFromApi({
+                showButtonState: false,
+                source: 'snapshot',
+                shouldNotify: false,
+                shouldAutoDial: false,
+                errorMessage: 'Background sync failed.',
+            });
         }
 
         function scheduleReconnect() {
@@ -808,6 +827,7 @@
 
             bridgeSocket.addEventListener('open', () => {
                 setSyncMessage('Live updates connected.', true);
+                silentlySyncLead();
             });
 
             bridgeSocket.addEventListener('message', (event) => {
@@ -856,7 +876,42 @@
 
             bridgeSocket.addEventListener('error', (error) => {
                 console.error('Bridge socket error:', error);
+
+                if (bridgeSocket && bridgeSocket.readyState === WebSocket.OPEN) {
+                    bridgeSocket.close(1011, 'Socket error');
+                }
             });
+        }
+
+        function ensureLiveSync() {
+            if (!autoPullCheckbox.checked || isPageUnloading) {
+                return;
+            }
+
+            if (!bridgeSocket || bridgeSocket.readyState === WebSocket.CLOSED) {
+                connectSocket();
+                return;
+            }
+
+            if (bridgeSocket.readyState === WebSocket.OPEN) {
+                silentlySyncLead();
+            }
+        }
+
+        function startHealthCheck() {
+            if (healthCheckTimer) {
+                return;
+            }
+
+            healthCheckTimer = window.setInterval(() => {
+                if (!autoPullCheckbox.checked || isPageUnloading || document.hidden) {
+                    return;
+                }
+
+                if (!bridgeSocket || bridgeSocket.readyState === WebSocket.CLOSED) {
+                    connectSocket();
+                }
+            }, SOCKET_HEALTH_CHECK_DELAY);
         }
 
         window.addEventListener('beforeunload', () => {
@@ -866,8 +921,20 @@
                 window.clearTimeout(reconnectTimer);
             }
 
+            if (healthCheckTimer) {
+                window.clearInterval(healthCheckTimer);
+            }
+
             if (bridgeSocket && (bridgeSocket.readyState === WebSocket.OPEN || bridgeSocket.readyState === WebSocket.CONNECTING)) {
                 bridgeSocket.close(1000, 'Page unloading');
+            }
+        });
+
+        window.addEventListener('focus', ensureLiveSync);
+        window.addEventListener('online', ensureLiveSync);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                ensureLiveSync();
             }
         });
 
@@ -875,6 +942,8 @@
         copyBtn.onclick = copyToClipboard;
         waBtn.onclick = openWhatsApp;
         pullBtn.onclick = () => loadLeadFromApi({ showButtonState: true });
+
+        startHealthCheck();
 
         if (autoPullCheckbox.checked) {
             connectSocket();
