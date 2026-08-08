@@ -614,6 +614,7 @@
 
         const SOCKET_RECONNECT_DELAY = 3000;
         const SOCKET_HEALTH_CHECK_DELAY = 5000;
+        const SOCKET_SUSPEND_GAP_THRESHOLD = 9000;
         const RESUME_RECONNECT_THRESHOLD = 1000;
         let currentNum = "",
             currentLeadSignature = "",
@@ -622,6 +623,7 @@
             bridgeSocket = null,
             reconnectTimer = null,
             healthCheckTimer = null,
+            lastHealthCheckAt = Date.now(),
             lastBackgroundAt = 0,
             wasBackgrounded = false,
             isPageUnloading = false;
@@ -1144,8 +1146,30 @@
                 return;
             }
 
+            lastHealthCheckAt = Date.now();
             healthCheckTimer = window.setInterval(() => {
-                if (!autoPullCheckbox.checked || isPageUnloading || document.hidden) {
+                const now = Date.now();
+                const elapsed = now - lastHealthCheckAt;
+                lastHealthCheckAt = now;
+
+                if (!autoPullCheckbox.checked || isPageUnloading) {
+                    return;
+                }
+
+                if (elapsed >= SOCKET_SUSPEND_GAP_THRESHOLD) {
+                    // #region debug-point D:health-gap-refresh
+                    reportDebug('D', 'public/index.html:startHealthCheck', 'Detected suspended timer gap', {
+                        elapsed,
+                        socketState: bridgeSocket?.readyState ?? null,
+                        wasBackgrounded,
+                        documentHidden: document.hidden,
+                    });
+                    // #endregion
+                    refreshLiveSession(`Health check gap ${elapsed}ms`);
+                    return;
+                }
+
+                if (document.hidden) {
                     return;
                 }
 
